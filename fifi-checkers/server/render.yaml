@@ -1,0 +1,7 @@
+﻿services:
+  - type: web
+    name: fifi-checkers-api
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
