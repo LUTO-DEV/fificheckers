@@ -19,6 +19,9 @@ const { initializeSockets } = require('./sockets/index');
 const app = express();
 const server = http.createServer(app);
 
+// Trust proxy (IMPORTANT for Render/production)
+app.set('trust proxy', 1);
+
 // CORS configuration
 const corsOptions = {
     origin: process.env.CLIENT_URL || 'http://localhost:5173',
@@ -30,7 +33,8 @@ const corsOptions = {
 const io = new Server(server, {
     cors: corsOptions,
     pingTimeout: 60000,
-    pingInterval: 25000
+    pingInterval: 25000,
+    transports: ['websocket', 'polling']
 });
 
 // Middleware
@@ -42,8 +46,10 @@ app.use(express.json());
 
 // Rate limiting
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100 // limit each IP to 100 requests per windowMs
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false
 });
 app.use('/api/', limiter);
 
