@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import useGameStore from '../stores/gameStore';
 import useSocket from './useSocket';
 import { PIECE } from '../utils/constants';
@@ -6,6 +6,7 @@ import { vibrate } from '../utils/helpers';
 
 export default function useGame() {
     const { makeMove, syncTimer } = useSocket();
+    const timerRef = useRef(null);
     const {
         matchId,
         boardState,
@@ -21,19 +22,45 @@ export default function useGame() {
         timer,
         selectPiece,
         clearSelection,
+        setTimer,
         status
     } = useGameStore();
 
-    // Sync timer periodically
+    // Local timer countdown
     useEffect(() => {
         if (status !== 'playing' || !matchId) return;
 
-        const interval = setInterval(() => {
+        // Clear any existing interval
+        if (timerRef.current) {
+            clearInterval(timerRef.current);
+        }
+
+        // Local countdown every second
+        timerRef.current = setInterval(() => {
+            const currentTimer = useGameStore.getState().timer;
+            if (!currentTimer || !currentTimer.activePlayer) return;
+
+            const playerKey = currentTimer.activePlayer === 1 ? 'player1' : 'player2';
+            const newTime = Math.max(0, currentTimer[playerKey] - 1);
+
+            setTimer({
+                ...currentTimer,
+                [playerKey]: newTime
+            });
+        }, 1000);
+
+        // Sync with server every 5 seconds
+        const syncInterval = setInterval(() => {
             syncTimer(matchId);
         }, 5000);
 
-        return () => clearInterval(interval);
-    }, [matchId, status, syncTimer]);
+        return () => {
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
+            clearInterval(syncInterval);
+        };
+    }, [matchId, status, syncTimer, setTimer]);
 
     // Check if it's my turn
     const isMyTurn = currentPlayer === myPlayerNum;

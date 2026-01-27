@@ -1,4 +1,5 @@
 const MatchmakingService = require('../services/matchmaking.service');
+const MatchService = require('../services/match.service');
 const User = require('../models/User');
 
 module.exports = (io, socket) => {
@@ -6,6 +7,8 @@ module.exports = (io, socket) => {
     socket.on('queue:join', async (data) => {
         try {
             const { betAmount = 0, timerMode = 'BLITZ' } = data;
+
+            console.log(`📋 ${socket.username} joining queue: bet=${betAmount}, mode=${timerMode}`);
 
             const user = await User.findOne({ telegramId: socket.telegramId });
             if (!user) {
@@ -36,6 +39,9 @@ module.exports = (io, socket) => {
                     opponentSocket.join(matchRoom);
                 }
 
+                // Get initial timer state
+                const timerState = MatchService.getTimerState(result.match.matchId);
+
                 // Notify both players
                 io.to(matchRoom).emit('match:start', {
                     matchId: result.match.matchId,
@@ -51,9 +57,13 @@ module.exports = (io, socket) => {
                     },
                     boardState: result.match.boardState,
                     turn: 'white',
+                    currentPlayer: 1,
                     betAmount: result.match.betAmount,
-                    timerMode: result.match.timerMode
+                    timerMode: result.match.timerMode,
+                    timerState
                 });
+
+                console.log(`🎮 Match started: ${result.match.matchId}`);
             } else {
                 socket.emit('queue:joined', {
                     position: result.position,
@@ -70,6 +80,8 @@ module.exports = (io, socket) => {
     // Leave queue
     socket.on('queue:leave', async () => {
         try {
+            console.log(`📋 ${socket.username} leaving queue`);
+
             const result = await MatchmakingService.leaveQueue(socket.telegramId);
 
             if (result.success) {
@@ -88,6 +100,8 @@ module.exports = (io, socket) => {
         try {
             const { betAmount = 0, timerMode = 'BLITZ' } = data;
 
+            console.log(`🏠 ${socket.username} creating room: bet=${betAmount}, mode=${timerMode}`);
+
             const result = MatchmakingService.createFriendRoom(
                 {
                     telegramId: socket.telegramId,
@@ -105,6 +119,10 @@ module.exports = (io, socket) => {
                     betAmount,
                     timerMode
                 });
+
+                console.log(`🏠 Room created: ${result.roomCode}`);
+            } else {
+                socket.emit('room:error', { error: result.error || 'Failed to create room' });
             }
         } catch (error) {
             console.error('Room create error:', error);
@@ -116,6 +134,8 @@ module.exports = (io, socket) => {
     socket.on('room:join', async (data) => {
         try {
             const { roomCode } = data;
+
+            console.log(`🏠 ${socket.username} joining room: ${roomCode}`);
 
             const result = await MatchmakingService.joinFriendRoom(roomCode, {
                 telegramId: socket.telegramId,
@@ -130,12 +150,17 @@ module.exports = (io, socket) => {
             const matchRoom = `match:${result.match.matchId}`;
             socket.join(matchRoom);
 
+            // Get host socket and move them to match room
             const hostSocket = io.sockets.sockets.get(result.room.host.socketId);
             if (hostSocket) {
                 hostSocket.leave(`room:${roomCode}`);
                 hostSocket.join(matchRoom);
             }
 
+            // Get initial timer state
+            const timerState = MatchService.getTimerState(result.match.matchId);
+
+            // Notify both players
             io.to(matchRoom).emit('match:start', {
                 matchId: result.match.matchId,
                 player1: {
@@ -150,9 +175,13 @@ module.exports = (io, socket) => {
                 },
                 boardState: result.match.boardState,
                 turn: 'white',
+                currentPlayer: 1,
                 betAmount: result.match.betAmount,
-                timerMode: result.match.timerMode
+                timerMode: result.match.timerMode,
+                timerState
             });
+
+            console.log(`🎮 Friend match started: ${result.match.matchId}`);
         } catch (error) {
             console.error('Room join error:', error);
             socket.emit('room:error', { error: 'Failed to join room' });
@@ -163,11 +192,16 @@ module.exports = (io, socket) => {
     socket.on('room:close', (data) => {
         try {
             const { roomCode } = data;
+
+            console.log(`🏠 ${socket.username} closing room: ${roomCode}`);
+
             const result = MatchmakingService.closeFriendRoom(roomCode, socket.telegramId);
 
             if (result.success) {
                 socket.leave(`room:${roomCode}`);
                 socket.emit('room:closed');
+            } else {
+                socket.emit('room:error', { error: result.error });
             }
         } catch (error) {
             console.error('Room close error:', error);
@@ -178,6 +212,8 @@ module.exports = (io, socket) => {
     socket.on('bot:start', async (data) => {
         try {
             const { betAmount = 0, timerMode = 'BLITZ' } = data;
+
+            console.log(`🤖 ${socket.username} starting bot match: bet=${betAmount}, mode=${timerMode}`);
 
             const result = await MatchmakingService.createBotMatch(
                 {
@@ -196,6 +232,9 @@ module.exports = (io, socket) => {
             const matchRoom = `match:${result.match.matchId}`;
             socket.join(matchRoom);
 
+            // Get initial timer state
+            const timerState = MatchService.getTimerState(result.match.matchId);
+
             socket.emit('match:start', {
                 matchId: result.match.matchId,
                 player1: {
@@ -211,10 +250,14 @@ module.exports = (io, socket) => {
                 },
                 boardState: result.match.boardState,
                 turn: 'white',
+                currentPlayer: 1,
                 betAmount: result.match.betAmount,
                 timerMode: result.match.timerMode,
+                timerState,
                 isBot: true
             });
+
+            console.log(`🤖 Bot match started: ${result.match.matchId}`);
         } catch (error) {
             console.error('Bot start error:', error);
             socket.emit('bot:error', { error: 'Failed to start bot match' });
