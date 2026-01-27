@@ -26,20 +26,36 @@ function initializeSockets(io) {
         chatSocket(io, socket);
         punishmentSocket(io, socket);
 
-        // Handle disconnection
-        socket.on('disconnect', () => {
-            console.log(`User disconnected: ${socket.telegramId}`);
-            onlineUsers.delete(socket.telegramId);
+        // Handle disconnection - BUT with a delay!
+        socket.on('disconnect', (reason) => {
+            console.log(`User disconnected: ${socket.telegramId} (reason: ${reason})`);
 
-            // Handle disconnect from match
-            const MatchService = require('../services/match.service');
-            MatchService.handleDisconnect(socket.telegramId).then(result => {
-                if (result) {
-                    io.to(`match:${result.matchId}`).emit('match:end', result);
+            // Don't immediately end match - give time to reconnect
+            setTimeout(() => {
+                // Check if user reconnected
+                const currentSocketId = onlineUsers.get(socket.telegramId);
+
+                if (currentSocketId === socket.id) {
+                    // Still disconnected, remove from online
+                    onlineUsers.delete(socket.telegramId);
+
+                    // Only handle match disconnect if truly gone for 10 seconds
+                    setTimeout(() => {
+                        const stillGone = !onlineUsers.has(socket.telegramId);
+                        if (stillGone) {
+                            console.log(`📴 User ${socket.telegramId} truly disconnected, ending match...`);
+                            const MatchService = require('../services/match.service');
+                            MatchService.handleDisconnect(socket.telegramId).then(result => {
+                                if (result) {
+                                    io.to(`match:${result.matchId}`).emit('match:end', result);
+                                }
+                            });
+                        }
+                    }, 10000); // 10 second grace period
                 }
-            });
+            }, 2000); // 2 second initial delay
 
-            // Leave queue if in it
+            // Leave queue immediately (that's fine)
             const MatchmakingService = require('../services/matchmaking.service');
             MatchmakingService.leaveQueue(socket.telegramId);
         });
