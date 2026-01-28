@@ -1,48 +1,61 @@
 const { RANKS } = require('../utils/constants');
 
 class RankingService {
+    static getRankOrder() {
+        return ['Wood', 'Bronze', 'Silver', 'Gold', 'Diamond'];
+    }
+
     static calculateRank(wins) {
-        if (wins >= RANKS.DIAMOND.minWins) return 'Diamond';
-        if (wins >= RANKS.GOLD.minWins) return 'Gold';
-        if (wins >= RANKS.SILVER.minWins) return 'Silver';
-        if (wins >= RANKS.BRONZE.minWins) return 'Bronze';
+        if (wins >= 500) return 'Diamond';
+        if (wins >= 100) return 'Gold';
+        if (wins >= 50) return 'Silver';
+        if (wins >= 20) return 'Bronze';
         return 'Wood';
     }
 
     static getRankInfo(rankName) {
-        return RANKS[rankName.toUpperCase()] || RANKS.WOOD;
+        if (!rankName) return RANKS.WOOD;
+        const key = rankName.toUpperCase();
+        return RANKS[key] || RANKS.WOOD;
     }
 
     static getNextRank(currentRank) {
-        const rankOrder = ['Wood', 'Bronze', 'Silver', 'Gold', 'Diamond'];
-        const currentIndex = rankOrder.indexOf(currentRank);
-
-        if (currentIndex === -1 || currentIndex === rankOrder.length - 1) {
-            return null;
-        }
-
-        return rankOrder[currentIndex + 1];
+        const rankOrder = this.getRankOrder();
+        const idx = rankOrder.findIndex(r => r.toLowerCase() === (currentRank || 'wood').toLowerCase());
+        if (idx === -1 || idx === rankOrder.length - 1) return null;
+        return rankOrder[idx + 1];
     }
 
     static getWinsToNextRank(currentRank, currentWins) {
         const nextRank = this.getNextRank(currentRank);
         if (!nextRank) return null;
-
         const nextRankInfo = this.getRankInfo(nextRank);
-        return Math.max(0, nextRankInfo.minWins - currentWins);
+        return Math.max(0, nextRankInfo.minWins - (currentWins || 0));
     }
 
     static getRankProgress(currentRank, currentWins) {
-        const currentRankInfo = this.getRankInfo(currentRank);
-        const nextRank = this.getNextRank(currentRank);
+        const rank = currentRank || 'Wood';
+        const wins = currentWins || 0;
+
+        const currentRankInfo = this.getRankInfo(rank);
+        const nextRank = this.getNextRank(rank);
 
         if (!nextRank) return 100;
 
         const nextRankInfo = this.getRankInfo(nextRank);
-        const winsInCurrentRank = currentWins - currentRankInfo.minWins;
+        const winsInRank = wins - currentRankInfo.minWins;
         const winsNeeded = nextRankInfo.minWins - currentRankInfo.minWins;
 
-        return Math.min(100, Math.floor((winsInCurrentRank / winsNeeded) * 100));
+        if (winsNeeded <= 0) return 100;
+        return Math.min(100, Math.floor((winsInRank / winsNeeded) * 100));
+    }
+
+    static getRankIcon(rankName) {
+        return this.getRankInfo(rankName)?.icon || '🪵';
+    }
+
+    static getRankColor(rankName) {
+        return this.getRankInfo(rankName)?.color || '#8B4513';
     }
 }
 

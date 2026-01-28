@@ -21,15 +21,14 @@ const TIMER_MODES = {
     CLASSIC: 600
 };
 
-const RANKS = [
-    { name: 'Bronze', minWins: 0, icon: '🥉' },
-    { name: 'Silver', minWins: 10, icon: '🥈' },
-    { name: 'Gold', minWins: 25, icon: '🥇' },
-    { name: 'Platinum', minWins: 50, icon: '💎' },
-    { name: 'Diamond', minWins: 100, icon: '💠' },
-    { name: 'Master', minWins: 200, icon: '👑' },
-    { name: 'Grandmaster', minWins: 500, icon: '🏆' }
-];
+// RANKS - matches User model enum: Wood, Bronze, Silver, Gold, Diamond
+const RANKS = {
+    WOOD: { name: 'Wood', minWins: 0, icon: '🪵', color: '#8B4513' },
+    BRONZE: { name: 'Bronze', minWins: 20, icon: '🥉', color: '#CD7F32' },
+    SILVER: { name: 'Silver', minWins: 50, icon: '🥈', color: '#C0C0C0' },
+    GOLD: { name: 'Gold', minWins: 100, icon: '🥇', color: '#FFD700' },
+    DIAMOND: { name: 'Diamond', minWins: 500, icon: '💎', color: '#B9F2FF' }
+};
 
 // Quick chat messages
 const QUICK_CHAT_MESSAGES = [
@@ -57,4 +56,4 @@ module.exports = {
     RANKS,
     QUICK_CHAT_MESSAGES,
     MAX_CHAT_LENGTH
-};
+};                                                                                                                              
