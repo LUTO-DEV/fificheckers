@@ -3,11 +3,15 @@ const matchmakingSocket = require('./matchmaking.socket');
 const matchSocket = require('./match.socket');
 const chatSocket = require('./chat.socket');
 const punishmentSocket = require('./punishment.socket');
+const MatchService = require('../services/match.service'); // ADD THIS
 
 // Track online users
 const onlineUsers = new Map();
 
 function initializeSockets(io) {
+    // Set IO on MatchService for timeout emissions
+    MatchService.setIO(io); // ADD THIS
+
     // Authentication middleware
     io.use(socketAuthMiddleware);
 
@@ -44,7 +48,6 @@ function initializeSockets(io) {
                         const stillGone = !onlineUsers.has(socket.telegramId);
                         if (stillGone) {
                             console.log(`📴 User ${socket.telegramId} truly disconnected, ending match...`);
-                            const MatchService = require('../services/match.service');
                             MatchService.handleDisconnect(socket.telegramId).then(result => {
                                 if (result) {
                                     io.to(`match:${result.matchId}`).emit('match:end', result);

@@ -11,6 +11,12 @@ class MatchService {
     constructor() {
         this.activeMatches = new Map();
         this.playerMatches = new Map();
+        this.io = null;
+    }
+
+    setIO(io) {
+        this.io = io;
+        console.log('✅ MatchService IO initialized');
     }
 
     createMatch(player1Data, player2Data, betAmount, timerMode, isBot = false) {
@@ -58,10 +64,18 @@ class MatchService {
             this.playerMatches.set(player2Data.telegramId, matchId);
         }
 
-        TimerService.createTimer(matchId, timerMode, (player) => {
-            this.handleTimeout(matchId, player);
+        // Create timer with timeout callback
+        TimerService.createTimer(matchId, timerMode, async (timedOutPlayer) => {
+            console.log(`⏱️ TIMEOUT! Player ${timedOutPlayer} ran out of time!`);
+            const result = await this.endMatch(matchId, timedOutPlayer === 1 ? 2 : 1, 'timeout');
+
+            if (result && this.io) {
+                console.log('📡 Emitting timeout match:end to room');
+                this.io.to(`match:${matchId}`).emit('match:end', result);
+            }
         });
 
+        // Start player 1's timer
         TimerService.startTimer(matchId, 1);
 
         console.log('✅ Match created and timer started');
@@ -116,8 +130,8 @@ class MatchService {
             return { success: false, error: 'Not your turn' };
         }
 
+        // Check multi-capture state
         if (match.multiCaptureState) {
-            console.log('Multi-capture in progress at:', match.multiCaptureState);
             if (move.from.row !== match.multiCaptureState.row ||
                 move.from.col !== match.multiCaptureState.col) {
                 console.log('❌ Must continue with same piece');
@@ -134,6 +148,7 @@ class MatchService {
 
         console.log('✅ Move valid | Capture:', validation.isCapture);
 
+        // Execute move
         const newBoard = CheckersLogic.executeMove(match.boardState, validation.move, validation.isCapture);
         match.boardState = newBoard;
         match.lastMoveAt = Date.now();
@@ -145,6 +160,7 @@ class MatchService {
             timestamp: Date.now()
         });
 
+        // Check for multi-capture
         if (validation.isCapture) {
             const furtherCaptures = CheckersLogic.getMultiCaptures(newBoard, move.to.row, move.to.col);
             console.log('Further captures available:', furtherCaptures.length);
@@ -161,22 +177,27 @@ class MatchService {
                     multiCapture: true,
                     availableCaptures: furtherCaptures,
                     turnEnded: false,
+                    nextPlayer: playerNum,
                     timerState: TimerService.getTimerState(matchId)
                 };
             }
         }
 
+        // Clear multi-capture state
         match.multiCaptureState = null;
 
+        // Check game end
         const gameEnd = CheckersLogic.checkGameEnd(newBoard, playerColor);
         if (gameEnd.ended) {
             console.log('🏁 Game ended! Winner:', gameEnd.winner);
             return this.endMatch(matchId, playerNum, gameEnd.reason);
         }
 
+        // Switch turn
         match.turn = playerColor === 'white' ? 'black' : 'white';
         match.currentPlayer = playerNum === 1 ? 2 : 1;
 
+        // Switch timer
         const timerState = TimerService.switchTimer(matchId, match.currentPlayer);
 
         console.log('✅ Turn complete. Next player:', match.currentPlayer);
@@ -219,6 +240,7 @@ class MatchService {
             return null;
         }
 
+        // Simulate thinking
         await new Promise(r => setTimeout(r, 600 + Math.random() * 600));
 
         if (match.status !== MATCH_STATUS.ACTIVE) {
@@ -252,6 +274,7 @@ class MatchService {
                 timestamp: Date.now()
             });
 
+            // Handle chain captures
             if (validation.isCapture) {
                 let currentRow = bestMove.to.row;
                 let currentCol = bestMove.to.col;
@@ -284,12 +307,14 @@ class MatchService {
             match.boardState = newBoard;
             match.lastMoveAt = Date.now();
 
+            // Check game end
             const gameEnd = CheckersLogic.checkGameEnd(newBoard, 'black');
             if (gameEnd.ended) {
                 console.log('🤖 Bot won!');
                 return this.endMatch(matchId, 2, gameEnd.reason);
             }
 
+            // Switch turn back to player
             match.turn = 'white';
             match.currentPlayer = 1;
             match.multiCaptureState = null;
@@ -315,10 +340,19 @@ class MatchService {
         }
     }
 
-    async handleTimeout(matchId, timedOutPlayer) {
-        console.log('⏱️ Timeout! Player', timedOutPlayer);
-        const winnerNum = timedOutPlayer === 1 ? 2 : 1;
-        return this.endMatch(matchId, winnerNum, 'timeout');
+    async handleDisconnect(telegramId) {
+        const matchId = this.playerMatches.get(telegramId);
+        if (!matchId) return null;
+
+        const match = this.activeMatches.get(matchId);
+        if (!match || match.status !== MATCH_STATUS.ACTIVE) return null;
+
+        const playerNum = match.player1.telegramId === telegramId ? 1 : 2;
+        const winnerNum = playerNum === 1 ? 2 : 1;
+
+        console.log('📴 Ending match due to disconnect. Winner: Player', winnerNum);
+
+        return this.endMatch(matchId, winnerNum, 'disconnect');
     }
 
     async handleResign(matchId, telegramId) {
@@ -331,21 +365,6 @@ class MatchService {
         console.log('🏳️ Player', playerNum, 'resigned');
 
         return this.endMatch(matchId, winnerNum, 'resign');
-    }
-
-    async handleDisconnect(telegramId) {
-        const matchId = this.playerMatches.get(telegramId);
-        if (!matchId) return null;
-
-        const match = this.activeMatches.get(matchId);
-        if (!match || match.status !== MATCH_STATUS.ACTIVE) return null;
-
-        const playerNum = match.player1.telegramId === telegramId ? 1 : 2;
-        const winnerNum = playerNum === 1 ? 2 : 1;
-
-        console.log('📴 Player', playerNum, 'disconnected');
-
-        return this.endMatch(matchId, winnerNum, 'disconnect');
     }
 
     async endMatch(matchId, winnerNum, reason) {
@@ -365,7 +384,9 @@ class MatchService {
 
         console.log('');
         console.log('🏁 ========== MATCH ENDED ==========');
-        console.log('Winner:', winner.username);
+        console.log('Match ID:', matchId.slice(0, 8));
+        console.log('Winner:', winner.username, '(Player', winnerNum + ')');
+        console.log('Loser:', loser.username);
         console.log('Reason:', reason);
         console.log('====================================');
 
@@ -388,6 +409,7 @@ class MatchService {
             duration: Math.floor((Date.now() - match.createdAt) / 1000)
         };
 
+        // Update winner stats
         if (!winner.isBot && winner.telegramId !== 'BOT') {
             try {
                 const winnerUser = await User.findOne({ telegramId: winner.telegramId });
@@ -400,12 +422,14 @@ class MatchService {
                         winStreak: winnerUser.winStreak,
                         rank: winnerUser.rank
                     };
+                    console.log('✅ Winner stats updated:', winnerUser.username);
                 }
             } catch (err) {
                 console.error('Winner update error:', err);
             }
         }
 
+        // Update loser stats
         if (!loser.isBot && loser.telegramId !== 'BOT') {
             try {
                 const loserUser = await User.findOne({ telegramId: loser.telegramId });
@@ -418,12 +442,14 @@ class MatchService {
                         winStreak: 0,
                         rank: loserUser.rank
                     };
+                    console.log('✅ Loser stats updated:', loserUser.username);
                 }
             } catch (err) {
                 console.error('Loser update error:', err);
             }
         }
 
+        // Save match to database
         try {
             await Match.create({
                 matchId,
@@ -436,18 +462,21 @@ class MatchService {
                 totalMoves: match.moveHistory.length,
                 duration: result.duration
             });
+            console.log('✅ Match saved to database');
         } catch (err) {
             console.error('Match save error:', err);
         }
 
+        // Cleanup player mappings
         this.playerMatches.delete(match.player1.telegramId);
         if (!match.player2.isBot) {
             this.playerMatches.delete(match.player2.telegramId);
         }
 
+        // Remove from memory after 1 minute
         setTimeout(() => {
             this.activeMatches.delete(matchId);
-            console.log('🗑️ Match removed from memory');
+            console.log('🗑️ Match removed from memory:', matchId.slice(0, 8));
         }, 60000);
 
         return result;
@@ -455,9 +484,19 @@ class MatchService {
 
     addChatMessage(matchId, telegramId, message) {
         const match = this.activeMatches.get(matchId);
-        if (!match) return null;
+        if (!match) {
+            console.log('❌ Chat: Match not found');
+            return null;
+        }
 
-        const playerNum = match.player1.telegramId === telegramId ? 1 : 2;
+        const playerNum = match.player1.telegramId === telegramId ? 1 :
+            match.player2.telegramId === telegramId ? 2 : 0;
+
+        if (playerNum === 0) {
+            console.log('❌ Chat: Player not in match');
+            return null;
+        }
+
         const username = playerNum === 1 ? match.player1.username : match.player2.username;
 
         const chatMessage = {
