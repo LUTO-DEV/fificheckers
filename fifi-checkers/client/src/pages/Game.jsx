@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Board from '../components/Board';
 import PlayerCard from '../components/PlayerCard';
-import Chat from '../components/Chat';
 import QuickChat from '../components/QuickChat';
 import MatchResult from '../components/MatchResult';
 import Button from '../components/Button';
@@ -18,49 +17,32 @@ export default function Game() {
     const navigate = useNavigate();
     const { user } = useUserStore();
     const {
-        matchId,
-        boardState,
-        player1,
-        player2,
-        currentPlayer,
-        myPlayerNum,
-        timer,
-        status,
-        result,
-        isBot,
-        reset
+        matchId, boardState, player1, player2,
+        currentPlayer, myPlayerNum, timer,
+        status, result, isBot, reset
     } = useGameStore();
-    const { resign, sendChat } = useSocket();
+    const { resign, sendChat, isConnected } = useSocket();
     const { hapticFeedback } = useTelegram();
 
-    const [showChat, setShowChat] = useState(false);
     const [showResignModal, setShowResignModal] = useState(false);
+    const [showDebug, setShowDebug] = useState(false);
 
-    // Redirect if no match
     useEffect(() => {
         if (!matchId && status !== 'playing') {
             navigate('/');
         }
     }, [matchId, status, navigate]);
 
-    // Count captured pieces
     const countCaptured = (color) => {
         if (!boardState) return 0;
-        let total = 12;
-        let current = 0;
-
+        let count = 0;
         for (let row of boardState) {
             for (let cell of row) {
-                if (color === 'white' && (cell === PIECE.WHITE || cell === PIECE.WHITE_KING)) {
-                    current++;
-                }
-                if (color === 'black' && (cell === PIECE.BLACK || cell === PIECE.BLACK_KING)) {
-                    current++;
-                }
+                if (color === 'white' && (cell === PIECE.WHITE || cell === PIECE.WHITE_KING)) count++;
+                if (color === 'black' && (cell === PIECE.BLACK || cell === PIECE.BLACK_KING)) count++;
             }
         }
-
-        return total - current;
+        return 12 - count;
     };
 
     const handleResign = () => {
@@ -86,12 +68,36 @@ export default function Game() {
 
     return (
         <div className="flex flex-col h-full bg-luxury-black safe-area-top safe-area-bottom">
-            {/* Opponent Card */}
+            {/* Debug */}
+            <button
+                onClick={() => setShowDebug(!showDebug)}
+                className="absolute top-2 right-2 z-50 w-8 h-8 bg-red-600/80 text-white text-xs rounded-full flex items-center justify-center"
+            >
+                🐛
+            </button>
+
+            {showDebug && (
+                <div className="absolute top-12 right-2 z-50 p-3 bg-black/95 border border-gold-500/50 rounded-lg text-xs text-white w-48">
+                    <p className="text-gold-400 font-bold mb-2">Debug Info</p>
+                    <p>🔌 Socket: {isConnected ? '✅' : '❌'}</p>
+                    <p>🎮 Match: {matchId?.slice(0, 8)}...</p>
+                    <p>👤 Me: P{myPlayerNum}</p>
+                    <p>🎯 Current: P{currentPlayer}</p>
+                    <p className={isMyTurn ? 'text-green-400' : 'text-red-400'}>
+                        🔄 My Turn: {isMyTurn ? 'YES' : 'NO'}
+                    </p>
+                    <p>⏱️ P1: {timer?.player1}s</p>
+                    <p>⏱️ P2: {timer?.player2}s</p>
+                    <p>⏱️ Active: P{timer?.activePlayer}</p>
+                </div>
+            )}
+
+            {/* Opponent */}
             <div className="px-3 pt-3">
                 <PlayerCard
                     player={myPlayerNum === 1 ? player2 : player1}
                     timer={myPlayerNum === 1 ? timer?.player2 || 180 : timer?.player1 || 180}
-                    isActive={currentPlayer !== myPlayerNum}
+                    isActive={!isMyTurn}
                     isMe={false}
                     color={myPlayerNum === 1 ? 'black' : 'white'}
                     captured={countCaptured(myPlayerNum === 1 ? 'white' : 'black')}
@@ -100,14 +106,17 @@ export default function Game() {
 
             {/* Turn Indicator */}
             <div className="text-center py-2">
-                <motion.span
-                    key={isMyTurn ? 'your' : 'opponent'}
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className={`text-sm font-medium ${isMyTurn ? 'text-gold-400' : 'text-luxury-text'}`}
+                <motion.div
+                    key={currentPlayer}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className={`inline-block px-4 py-1 rounded-full text-sm font-medium ${isMyTurn
+                            ? 'bg-gold-500/20 text-gold-400 border border-gold-500/30'
+                            : 'bg-luxury-card text-luxury-text border border-luxury-border'
+                        }`}
                 >
-                    {isMyTurn ? "Your turn" : "Opponent's turn"}
-                </motion.span>
+                    {isMyTurn ? "✨ Your turn" : "⏳ Waiting..."}
+                </motion.div>
             </div>
 
             {/* Board */}
@@ -115,92 +124,46 @@ export default function Game() {
                 <Board />
             </div>
 
-            {/* My Card */}
+            {/* Me */}
             <div className="px-3 pt-2">
                 <PlayerCard
                     player={myPlayerNum === 1 ? player1 : player2}
                     timer={myPlayerNum === 1 ? timer?.player1 || 180 : timer?.player2 || 180}
-                    isActive={currentPlayer === myPlayerNum}
+                    isActive={isMyTurn}
                     isMe={true}
                     color={myPlayerNum === 1 ? 'white' : 'black'}
                     captured={countCaptured(myPlayerNum === 1 ? 'black' : 'white')}
                 />
             </div>
 
-            {/* Quick Chat (only for non-bot games) */}
+            {/* Quick Chat */}
             {!isBot && (
                 <div className="px-3 py-2">
                     <QuickChat onSend={handleQuickChat} />
                 </div>
             )}
 
-            {/* Bottom Actions */}
-            <div className="flex items-center gap-3 px-3 pb-3">
-                {!isBot && (
-                    <Button
-                        onClick={() => setShowChat(true)}
-                        variant="secondary"
-                        size="sm"
-                        icon="💬"
-                    >
-                        Chat
-                    </Button>
-                )}
-
-                <div className="flex-1" />
-
-                <Button
-                    onClick={() => setShowResignModal(true)}
-                    variant="danger"
-                    size="sm"
-                    icon="🏳️"
-                >
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-3 px-3 pb-3">
+                <Button onClick={() => setShowResignModal(true)} variant="danger" size="sm" icon="🏳️">
                     Resign
                 </Button>
             </div>
 
-            {/* Chat Panel */}
-            <AnimatePresence>
-                {showChat && (
-                    <Chat isOpen={showChat} onClose={() => setShowChat(false)} />
-                )}
-            </AnimatePresence>
-
             {/* Resign Modal */}
-            <Modal
-                isOpen={showResignModal}
-                onClose={() => setShowResignModal(false)}
-                title="Resign Game?"
-            >
+            <Modal isOpen={showResignModal} onClose={() => setShowResignModal(false)} title="Resign?">
                 <div className="space-y-4">
-                    <p className="text-luxury-light text-center text-sm">
-                        Are you sure? This will count as a loss.
-                    </p>
-
+                    <p className="text-luxury-light text-center text-sm">This counts as a loss.</p>
                     <div className="flex gap-3">
-                        <Button
-                            onClick={() => setShowResignModal(false)}
-                            variant="secondary"
-                            fullWidth
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            onClick={handleResign}
-                            variant="danger"
-                            fullWidth
-                        >
-                            Resign
-                        </Button>
+                        <Button onClick={() => setShowResignModal(false)} variant="secondary" fullWidth>Cancel</Button>
+                        <Button onClick={handleResign} variant="danger" fullWidth>Resign</Button>
                     </div>
                 </div>
             </Modal>
 
-            {/* Match Result */}
+            {/* Result */}
             <AnimatePresence>
-                {status === 'finished' && result && (
-                    <MatchResult />
-                )}
+                {status === 'finished' && result && <MatchResult />}
             </AnimatePresence>
         </div>
     );

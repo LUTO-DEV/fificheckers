@@ -16,10 +16,13 @@ class MatchService {
     createMatch(player1Data, player2Data, betAmount, timerMode, isBot = false) {
         const matchId = uuidv4();
 
-        console.log(`🎮 Creating match ${matchId}`);
-        console.log(`   Player 1: ${player1Data.username} (${player1Data.telegramId})`);
-        console.log(`   Player 2: ${isBot ? 'BOT' : player2Data.username}`);
-        console.log(`   Bet: ${betAmount}, Timer: ${timerMode}`);
+        console.log('');
+        console.log('🎮 ========== CREATING MATCH ==========');
+        console.log('Match ID:', matchId);
+        console.log('Player 1:', player1Data.username);
+        console.log('Player 2:', isBot ? 'BOT' : player2Data?.username);
+        console.log('Bet:', betAmount, '| Timer:', timerMode);
+        console.log('=======================================');
 
         const match = {
             matchId,
@@ -55,16 +58,13 @@ class MatchService {
             this.playerMatches.set(player2Data.telegramId, matchId);
         }
 
-        // Create and start timer
         TimerService.createTimer(matchId, timerMode, (player) => {
-            console.log(`⏱️ Timeout callback for player ${player}`);
             this.handleTimeout(matchId, player);
         });
 
-        // Start timer for white (player1)
         TimerService.startTimer(matchId, 1);
 
-        console.log(`✅ Match ${matchId} created and timer started`);
+        console.log('✅ Match created and timer started');
 
         return match;
     }
@@ -82,121 +82,62 @@ class MatchService {
     validateAndExecuteMove(matchId, telegramId, move) {
         const match = this.activeMatches.get(matchId);
 
+        console.log('');
+        console.log('♟️ ========== PROCESSING MOVE ==========');
+        console.log('Match:', matchId?.slice(0, 8));
+        console.log('Player:', telegramId);
+        console.log('Move:', JSON.stringify(move));
+
         if (!match) {
-            console.error(`❌ Match ${matchId} not found`);
+            console.log('❌ Match not found');
             return { success: false, error: 'Match not found' };
         }
 
         if (match.status !== MATCH_STATUS.ACTIVE) {
-            console.error(`❌ Match ${matchId} is ${match.status}, not active`);
+            console.log('❌ Match not active:', match.status);
             return { success: false, error: 'Match is not active' };
         }
 
-        // Determine player number
         const playerNum = match.player1.telegramId === telegramId ? 1 :
             match.player2.telegramId === telegramId ? 2 : 0;
 
         if (playerNum === 0) {
+            console.log('❌ Player not in match');
             return { success: false, error: 'You are not in this match' };
         }
 
         const playerColor = playerNum === 1 ? 'white' : 'black';
 
-        // Check if it's this player's turn
+        console.log('Player Num:', playerNum, '| Color:', playerColor);
+        console.log('Current Player:', match.currentPlayer);
+
         if (match.currentPlayer !== playerNum) {
+            console.log('❌ Not your turn');
             return { success: false, error: 'Not your turn' };
         }
 
-        // Handle multi-capture continuation
         if (match.multiCaptureState) {
+            console.log('Multi-capture in progress at:', match.multiCaptureState);
             if (move.from.row !== match.multiCaptureState.row ||
                 move.from.col !== match.multiCaptureState.col) {
+                console.log('❌ Must continue with same piece');
                 return { success: false, error: 'Must continue capturing with the same piece' };
             }
-
-            // Validate this is a valid capture from the multi-capture position
-            const availableCaptures = CheckersLogic.getMultiCaptures(
-                match.boardState,
-                match.multiCaptureState.row,
-                match.multiCaptureState.col
-            );
-
-            const validCapture = availableCaptures.find(c =>
-                c.to.row === move.to.row && c.to.col === move.to.col
-            );
-
-            if (!validCapture) {
-                return { success: false, error: 'Invalid capture' };
-            }
-
-            // Execute the capture
-            const newBoard = CheckersLogic.executeMove(match.boardState, validCapture, true);
-            match.boardState = newBoard;
-            match.lastMoveAt = Date.now();
-
-            match.moveHistory.push({
-                player: playerNum,
-                move,
-                isCapture: true,
-                isChainCapture: true,
-                timestamp: Date.now()
-            });
-
-            // Check for more captures
-            const furtherCaptures = CheckersLogic.getMultiCaptures(newBoard, move.to.row, move.to.col);
-
-            if (furtherCaptures.length > 0) {
-                match.multiCaptureState = { row: move.to.row, col: move.to.col };
-                return {
-                    success: true,
-                    board: newBoard,
-                    isCapture: true,
-                    multiCapture: true,
-                    availableCaptures: furtherCaptures,
-                    turnEnded: false,
-                    timerState: TimerService.getTimerState(matchId)
-                };
-            }
-
-            // No more captures, end turn
-            match.multiCaptureState = null;
-
-            // Check for game end
-            const gameEnd = CheckersLogic.checkGameEnd(newBoard, playerColor);
-            if (gameEnd.ended) {
-                return this.endMatch(matchId, playerNum, gameEnd.reason);
-            }
-
-            // Switch turn
-            match.turn = playerColor === 'white' ? 'black' : 'white';
-            match.currentPlayer = playerNum === 1 ? 2 : 1;
-
-            const timerState = TimerService.switchTimer(matchId, match.currentPlayer);
-
-            return {
-                success: true,
-                board: newBoard,
-                isCapture: true,
-                multiCapture: false,
-                turnEnded: true,
-                nextPlayer: match.currentPlayer,
-                timerState
-            };
         }
 
-        // Normal move validation
         const validation = CheckersLogic.validateMove(match.boardState, move, playerColor);
+
         if (!validation.valid) {
-            console.error(`❌ Invalid move:`, validation.error);
+            console.log('❌ Invalid move:', validation.error);
             return { success: false, error: validation.error };
         }
 
-        // Execute move
+        console.log('✅ Move valid | Capture:', validation.isCapture);
+
         const newBoard = CheckersLogic.executeMove(match.boardState, validation.move, validation.isCapture);
         match.boardState = newBoard;
         match.lastMoveAt = Date.now();
 
-        // Record move
         match.moveHistory.push({
             player: playerNum,
             move,
@@ -204,13 +145,15 @@ class MatchService {
             timestamp: Date.now()
         });
 
-        console.log(`♟️ Move executed: ${JSON.stringify(move)}`);
-
-        // Check for multi-capture
         if (validation.isCapture) {
             const furtherCaptures = CheckersLogic.getMultiCaptures(newBoard, move.to.row, move.to.col);
+            console.log('Further captures available:', furtherCaptures.length);
+
             if (furtherCaptures.length > 0) {
                 match.multiCaptureState = { row: move.to.row, col: move.to.col };
+                console.log('🔄 Multi-capture! Player continues...');
+                console.log('=========================================');
+
                 return {
                     success: true,
                     board: newBoard,
@@ -223,23 +166,21 @@ class MatchService {
             }
         }
 
-        // Clear multi-capture state
         match.multiCaptureState = null;
 
-        // Check for game end
         const gameEnd = CheckersLogic.checkGameEnd(newBoard, playerColor);
         if (gameEnd.ended) {
+            console.log('🏁 Game ended! Winner:', gameEnd.winner);
             return this.endMatch(matchId, playerNum, gameEnd.reason);
         }
 
-        // Switch turn
         match.turn = playerColor === 'white' ? 'black' : 'white';
         match.currentPlayer = playerNum === 1 ? 2 : 1;
 
-        // Switch timer
         const timerState = TimerService.switchTimer(matchId, match.currentPlayer);
 
-        console.log(`♟️ Turn switched to player ${match.currentPlayer}`);
+        console.log('✅ Turn complete. Next player:', match.currentPlayer);
+        console.log('=========================================');
 
         return {
             success: true,
@@ -254,93 +195,128 @@ class MatchService {
 
     async executeBotMove(matchId) {
         const match = this.activeMatches.get(matchId);
-        if (!match || match.currentPlayer !== 2 || !match.player2.isBot) {
+
+        console.log('');
+        console.log('🤖 ========== BOT TURN ==========');
+
+        if (!match) {
+            console.log('❌ Match not found');
+            return null;
+        }
+
+        if (match.currentPlayer !== 2) {
+            console.log('❌ Not bot turn. Current:', match.currentPlayer);
+            return null;
+        }
+
+        if (!match.player2.isBot) {
+            console.log('❌ Player 2 is not bot');
             return null;
         }
 
         if (match.status !== MATCH_STATUS.ACTIVE) {
+            console.log('❌ Match not active:', match.status);
             return null;
         }
 
-        console.log('🤖 Bot thinking...');
+        await new Promise(r => setTimeout(r, 600 + Math.random() * 600));
 
-        // Add delay to feel natural
-        await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 1200));
-
-        // Check match is still active
-        if (match.status !== MATCH_STATUS.ACTIVE) return null;
-
-        const bestMove = BotService.getBestMove(match.boardState, 'black');
-
-        if (!bestMove) {
-            console.log('🤖 Bot has no moves - player wins!');
-            return this.endMatch(matchId, 1, 'no_moves');
+        if (match.status !== MATCH_STATUS.ACTIVE) {
+            console.log('❌ Match ended while bot was thinking');
+            return null;
         }
 
-        console.log('🤖 Bot move:', JSON.stringify(bestMove));
+        try {
+            const bestMove = BotService.getBestMove(match.boardState, 'black');
 
-        // Execute the move
-        const validation = CheckersLogic.validateMove(match.boardState, bestMove, 'black');
-        let newBoard = CheckersLogic.executeMove(match.boardState, validation.move, validation.isCapture);
-
-        match.moveHistory.push({
-            player: 2,
-            move: bestMove,
-            isCapture: validation.isCapture,
-            timestamp: Date.now()
-        });
-
-        // Handle multi-capture for bot
-        if (validation.isCapture) {
-            let currentPos = { row: bestMove.to.row, col: bestMove.to.col };
-
-            while (true) {
-                const furtherCaptures = CheckersLogic.getMultiCaptures(newBoard, currentPos.row, currentPos.col);
-                if (furtherCaptures.length === 0) break;
-
-                await new Promise(resolve => setTimeout(resolve, 400));
-
-                const nextCapture = furtherCaptures[0];
-                newBoard = CheckersLogic.executeMove(newBoard, nextCapture, true);
-                currentPos = { row: nextCapture.to.row, col: nextCapture.to.col };
-
-                match.moveHistory.push({
-                    player: 2,
-                    move: nextCapture,
-                    isCapture: true,
-                    timestamp: Date.now()
-                });
+            if (!bestMove) {
+                console.log('🤖 No valid moves - Player wins!');
+                return this.endMatch(matchId, 1, 'no_moves');
             }
+
+            console.log('🤖 Best move:', JSON.stringify(bestMove));
+
+            const validation = CheckersLogic.validateMove(match.boardState, bestMove, 'black');
+
+            if (!validation.valid) {
+                console.log('❌ Bot move invalid:', validation.error);
+                return null;
+            }
+
+            let newBoard = CheckersLogic.executeMove(match.boardState, validation.move, validation.isCapture);
+
+            match.moveHistory.push({
+                player: 2,
+                move: bestMove,
+                isCapture: validation.isCapture,
+                timestamp: Date.now()
+            });
+
+            if (validation.isCapture) {
+                let currentRow = bestMove.to.row;
+                let currentCol = bestMove.to.col;
+                let chainCount = 0;
+
+                while (chainCount < 12) {
+                    const furtherCaptures = CheckersLogic.getMultiCaptures(newBoard, currentRow, currentCol);
+
+                    if (furtherCaptures.length === 0) break;
+
+                    console.log('🤖 Chain capture', chainCount + 1);
+
+                    const nextCapture = furtherCaptures[0];
+                    newBoard = CheckersLogic.executeMove(newBoard, nextCapture, true);
+
+                    currentRow = nextCapture.to.row;
+                    currentCol = nextCapture.to.col;
+
+                    match.moveHistory.push({
+                        player: 2,
+                        move: nextCapture,
+                        isCapture: true,
+                        timestamp: Date.now()
+                    });
+
+                    chainCount++;
+                }
+            }
+
+            match.boardState = newBoard;
+            match.lastMoveAt = Date.now();
+
+            const gameEnd = CheckersLogic.checkGameEnd(newBoard, 'black');
+            if (gameEnd.ended) {
+                console.log('🤖 Bot won!');
+                return this.endMatch(matchId, 2, gameEnd.reason);
+            }
+
+            match.turn = 'white';
+            match.currentPlayer = 1;
+            match.multiCaptureState = null;
+
+            const timerState = TimerService.switchTimer(matchId, 1);
+
+            console.log('🤖 Bot done. Player 1 turn');
+            console.log('=================================');
+
+            return {
+                success: true,
+                board: newBoard,
+                move: bestMove,
+                isCapture: validation.isCapture,
+                turnEnded: true,
+                nextPlayer: 1,
+                timerState
+            };
+
+        } catch (error) {
+            console.error('❌ Bot error:', error.message);
+            return null;
         }
-
-        match.boardState = newBoard;
-        match.lastMoveAt = Date.now();
-
-        // Check for game end
-        const gameEnd = CheckersLogic.checkGameEnd(newBoard, 'black');
-        if (gameEnd.ended) {
-            return this.endMatch(matchId, 2, gameEnd.reason);
-        }
-
-        // Switch turn back to player
-        match.turn = 'white';
-        match.currentPlayer = 1;
-        match.multiCaptureState = null;
-
-        const timerState = TimerService.switchTimer(matchId, 1);
-
-        return {
-            success: true,
-            board: newBoard,
-            move: bestMove,
-            turnEnded: true,
-            nextPlayer: 1,
-            timerState
-        };
     }
 
     async handleTimeout(matchId, timedOutPlayer) {
-        console.log(`⏱️ Handling timeout for player ${timedOutPlayer} in match ${matchId}`);
+        console.log('⏱️ Timeout! Player', timedOutPlayer);
         const winnerNum = timedOutPlayer === 1 ? 2 : 1;
         return this.endMatch(matchId, winnerNum, 'timeout');
     }
@@ -352,7 +328,7 @@ class MatchService {
         const playerNum = match.player1.telegramId === telegramId ? 1 : 2;
         const winnerNum = playerNum === 1 ? 2 : 1;
 
-        console.log(`🏳️ Player ${playerNum} resigned in match ${matchId}`);
+        console.log('🏳️ Player', playerNum, 'resigned');
 
         return this.endMatch(matchId, winnerNum, 'resign');
     }
@@ -367,7 +343,7 @@ class MatchService {
         const playerNum = match.player1.telegramId === telegramId ? 1 : 2;
         const winnerNum = playerNum === 1 ? 2 : 1;
 
-        console.log(`📴 Player ${playerNum} disconnected from match ${matchId}`);
+        console.log('📴 Player', playerNum, 'disconnected');
 
         return this.endMatch(matchId, winnerNum, 'disconnect');
     }
@@ -376,9 +352,8 @@ class MatchService {
         const match = this.activeMatches.get(matchId);
         if (!match) return null;
 
-        // Prevent double-ending
         if (match.status === MATCH_STATUS.FINISHED) {
-            console.log(`⚠️ Match ${matchId} already finished`);
+            console.log('⚠️ Match already finished');
             return null;
         }
 
@@ -388,8 +363,11 @@ class MatchService {
         const winner = winnerNum === 1 ? match.player1 : match.player2;
         const loser = winnerNum === 1 ? match.player2 : match.player1;
 
-        console.log(`🏁 Match ${matchId} ended!`);
-        console.log(`   Winner: ${winner.username} (reason: ${reason})`);
+        console.log('');
+        console.log('🏁 ========== MATCH ENDED ==========');
+        console.log('Winner:', winner.username);
+        console.log('Reason:', reason);
+        console.log('====================================');
 
         const result = {
             matchId,
@@ -410,7 +388,6 @@ class MatchService {
             duration: Math.floor((Date.now() - match.createdAt) / 1000)
         };
 
-        // Update winner stats (if not bot)
         if (!winner.isBot && winner.telegramId !== 'BOT') {
             try {
                 const winnerUser = await User.findOne({ telegramId: winner.telegramId });
@@ -425,11 +402,10 @@ class MatchService {
                     };
                 }
             } catch (err) {
-                console.error('Error updating winner:', err);
+                console.error('Winner update error:', err);
             }
         }
 
-        // Update loser stats (if not bot)
         if (!loser.isBot && loser.telegramId !== 'BOT') {
             try {
                 const loserUser = await User.findOne({ telegramId: loser.telegramId });
@@ -444,11 +420,10 @@ class MatchService {
                     };
                 }
             } catch (err) {
-                console.error('Error updating loser:', err);
+                console.error('Loser update error:', err);
             }
         }
 
-        // Save match history
         try {
             await Match.create({
                 matchId,
@@ -462,19 +437,17 @@ class MatchService {
                 duration: result.duration
             });
         } catch (err) {
-            console.error('Error saving match:', err);
+            console.error('Match save error:', err);
         }
 
-        // Cleanup player mappings
         this.playerMatches.delete(match.player1.telegramId);
         if (!match.player2.isBot) {
             this.playerMatches.delete(match.player2.telegramId);
         }
 
-        // Keep match briefly for result viewing, then delete
         setTimeout(() => {
             this.activeMatches.delete(matchId);
-            console.log(`🗑️ Match ${matchId} removed from memory`);
+            console.log('🗑️ Match removed from memory');
         }, 60000);
 
         return result;
