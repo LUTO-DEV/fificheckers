@@ -97,7 +97,6 @@ class MatchService {
             match.player2.telegramId === telegramId ? 2 : 0;
 
         if (playerNum === 0) {
-            console.error(`❌ Player ${telegramId} is not in match ${matchId}`);
             return { success: false, error: 'You are not in this match' };
         }
 
@@ -105,7 +104,6 @@ class MatchService {
 
         // Check if it's this player's turn
         if (match.currentPlayer !== playerNum) {
-            console.error(`❌ Not player ${playerNum}'s turn (current: ${match.currentPlayer})`);
             return { success: false, error: 'Not your turn' };
         }
 
@@ -115,9 +113,78 @@ class MatchService {
                 move.from.col !== match.multiCaptureState.col) {
                 return { success: false, error: 'Must continue capturing with the same piece' };
             }
+
+            // Validate this is a valid capture from the multi-capture position
+            const availableCaptures = CheckersLogic.getMultiCaptures(
+                match.boardState,
+                match.multiCaptureState.row,
+                match.multiCaptureState.col
+            );
+
+            const validCapture = availableCaptures.find(c =>
+                c.to.row === move.to.row && c.to.col === move.to.col
+            );
+
+            if (!validCapture) {
+                return { success: false, error: 'Invalid capture' };
+            }
+
+            // Execute the capture
+            const newBoard = CheckersLogic.executeMove(match.boardState, validCapture, true);
+            match.boardState = newBoard;
+            match.lastMoveAt = Date.now();
+
+            match.moveHistory.push({
+                player: playerNum,
+                move,
+                isCapture: true,
+                isChainCapture: true,
+                timestamp: Date.now()
+            });
+
+            // Check for more captures
+            const furtherCaptures = CheckersLogic.getMultiCaptures(newBoard, move.to.row, move.to.col);
+
+            if (furtherCaptures.length > 0) {
+                match.multiCaptureState = { row: move.to.row, col: move.to.col };
+                return {
+                    success: true,
+                    board: newBoard,
+                    isCapture: true,
+                    multiCapture: true,
+                    availableCaptures: furtherCaptures,
+                    turnEnded: false,
+                    timerState: TimerService.getTimerState(matchId)
+                };
+            }
+
+            // No more captures, end turn
+            match.multiCaptureState = null;
+
+            // Check for game end
+            const gameEnd = CheckersLogic.checkGameEnd(newBoard, playerColor);
+            if (gameEnd.ended) {
+                return this.endMatch(matchId, playerNum, gameEnd.reason);
+            }
+
+            // Switch turn
+            match.turn = playerColor === 'white' ? 'black' : 'white';
+            match.currentPlayer = playerNum === 1 ? 2 : 1;
+
+            const timerState = TimerService.switchTimer(matchId, match.currentPlayer);
+
+            return {
+                success: true,
+                board: newBoard,
+                isCapture: true,
+                multiCapture: false,
+                turnEnded: true,
+                nextPlayer: match.currentPlayer,
+                timerState
+            };
         }
 
-        // Validate move
+        // Normal move validation
         const validation = CheckersLogic.validateMove(match.boardState, move, playerColor);
         if (!validation.valid) {
             console.error(`❌ Invalid move:`, validation.error);

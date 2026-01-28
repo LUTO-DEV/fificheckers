@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef } from 'react';
 import useGameStore from '../stores/gameStore';
 import useSocket from './useSocket';
 import { PIECE } from '../utils/constants';
-import { vibrate } from '../utils/helpers';
 
 export default function useGame() {
     const { makeMove, syncTimer } = useSocket();
@@ -10,14 +9,12 @@ export default function useGame() {
     const {
         matchId,
         boardState,
-        turn,
         currentPlayer,
         myPlayerNum,
         myColor,
         selectedPiece,
         validMoves,
         validCaptures,
-        mustCapture,
         multiCaptureState,
         timer,
         selectPiece,
@@ -30,12 +27,10 @@ export default function useGame() {
     useEffect(() => {
         if (status !== 'playing' || !matchId) return;
 
-        // Clear any existing interval
         if (timerRef.current) {
             clearInterval(timerRef.current);
         }
 
-        // Local countdown every second
         timerRef.current = setInterval(() => {
             const currentTimer = useGameStore.getState().timer;
             if (!currentTimer || !currentTimer.activePlayer) return;
@@ -49,20 +44,16 @@ export default function useGame() {
             });
         }, 1000);
 
-        // Sync with server every 5 seconds
         const syncInterval = setInterval(() => {
             syncTimer(matchId);
         }, 5000);
 
         return () => {
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-            }
+            if (timerRef.current) clearInterval(timerRef.current);
             clearInterval(syncInterval);
         };
     }, [matchId, status, syncTimer, setTimer]);
 
-    // Check if it's my turn
     const isMyTurn = currentPlayer === myPlayerNum;
 
     // Get valid moves for a piece
@@ -70,11 +61,11 @@ export default function useGame() {
         if (!boardState) return { moves: [], captures: [], mustCapture: false };
 
         const piece = boardState[row][col];
-        if (!piece) return { moves: [], captures: [], mustCapture: false };
+        if (!piece || piece === PIECE.EMPTY) return { moves: [], captures: [], mustCapture: false };
 
         const isWhite = piece === PIECE.WHITE || piece === PIECE.WHITE_KING;
         const isBlack = piece === PIECE.BLACK || piece === PIECE.BLACK_KING;
-        const isKing = piece === PIECE.WHITE_KING || piece === PIECE.BLACK_KING;
+        const pieceIsKing = piece === PIECE.WHITE_KING || piece === PIECE.BLACK_KING;
 
         if ((myColor === 'white' && !isWhite) || (myColor === 'black' && !isBlack)) {
             return { moves: [], captures: [], mustCapture: false };
@@ -83,92 +74,125 @@ export default function useGame() {
         const moves = [];
         const captures = [];
 
-        const directions = isKing
-            ? [[-1, -1], [-1, 1], [1, -1], [1, 1]]
-            : isWhite
-                ? [[-1, -1], [-1, 1]]
-                : [[1, -1], [1, 1]];
+        // Get moves based on piece type
+        if (pieceIsKing) {
+            // King moves - multiple squares diagonally
+            const directions = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
 
-        // Check captures first
-        for (const [dRow, dCol] of directions) {
-            const jumpRow = row + dRow * 2;
-            const jumpCol = col + dCol * 2;
-            const midRow = row + dRow;
-            const midCol = col + dCol;
+            for (const [dRow, dCol] of directions) {
+                let foundEnemy = null;
+                let distance = 1;
 
-            if (jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
-                const midPiece = boardState[midRow][midCol];
-                const targetPiece = boardState[jumpRow][jumpCol];
+                while (true) {
+                    const newRow = row + dRow * distance;
+                    const newCol = col + dCol * distance;
 
-                if (targetPiece === PIECE.EMPTY && midPiece !== PIECE.EMPTY) {
-                    const midIsWhite = midPiece === PIECE.WHITE || midPiece === PIECE.WHITE_KING;
-                    const midIsBlack = midPiece === PIECE.BLACK || midPiece === PIECE.BLACK_KING;
+                    if (newRow < 0 || newRow > 7 || newCol < 0 || newCol > 7) break;
 
-                    if ((isWhite && midIsBlack) || (isBlack && midIsWhite)) {
-                        captures.push({ row: jumpRow, col: jumpCol, captured: { row: midRow, col: midCol } });
+                    const targetPiece = boardState[newRow][newCol];
+
+                    if (targetPiece === PIECE.EMPTY) {
+                        if (foundEnemy) {
+                            captures.push({
+                                row: newRow,
+                                col: newCol,
+                                captured: { row: foundEnemy.row, col: foundEnemy.col }
+                            });
+                        } else {
+                            moves.push({ row: newRow, col: newCol });
+                        }
+                    } else {
+                        const targetIsWhite = targetPiece === PIECE.WHITE || targetPiece === PIECE.WHITE_KING;
+                        const targetIsBlack = targetPiece === PIECE.BLACK || targetPiece === PIECE.BLACK_KING;
+                        const isEnemy = (isWhite && targetIsBlack) || (isBlack && targetIsWhite);
+
+                        if (isEnemy && !foundEnemy) {
+                            foundEnemy = { row: newRow, col: newCol };
+                        } else {
+                            break;
+                        }
                     }
+
+                    distance++;
                 }
             }
-        }
+        } else {
+            // Regular piece moves
+            const moveDirections = isWhite ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]];
+            const captureDirections = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
 
-        // Check if any piece must capture
-        let anyCaptures = false;
-        for (let r = 0; r < 8; r++) {
-            for (let c = 0; c < 8; c++) {
-                const p = boardState[r][c];
-                const pIsWhite = p === PIECE.WHITE || p === PIECE.WHITE_KING;
-                const pIsBlack = p === PIECE.BLACK || p === PIECE.BLACK_KING;
-                const pIsKing = p === PIECE.WHITE_KING || p === PIECE.BLACK_KING;
+            // Check captures first
+            for (const [dRow, dCol] of captureDirections) {
+                const midRow = row + dRow;
+                const midCol = col + dCol;
+                const jumpRow = row + dRow * 2;
+                const jumpCol = col + dCol * 2;
 
-                if ((myColor === 'white' && pIsWhite) || (myColor === 'black' && pIsBlack)) {
-                    const pDirs = pIsKing
-                        ? [[-1, -1], [-1, 1], [1, -1], [1, 1]]
-                        : pIsWhite
-                            ? [[-1, -1], [-1, 1]]
-                            : [[1, -1], [1, 1]];
+                if (jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
+                    const midPiece = boardState[midRow][midCol];
+                    const targetPiece = boardState[jumpRow][jumpCol];
 
-                    for (const [dRow, dCol] of pDirs) {
-                        const jr = r + dRow * 2;
-                        const jc = c + dCol * 2;
-                        const mr = r + dRow;
-                        const mc = c + dCol;
+                    if (targetPiece === PIECE.EMPTY && midPiece !== PIECE.EMPTY) {
+                        const midIsWhite = midPiece === PIECE.WHITE || midPiece === PIECE.WHITE_KING;
+                        const midIsBlack = midPiece === PIECE.BLACK || midPiece === PIECE.BLACK_KING;
 
-                        if (jr >= 0 && jr < 8 && jc >= 0 && jc < 8) {
-                            const mp = boardState[mr][mc];
-                            const tp = boardState[jr][jc];
-
-                            if (tp === PIECE.EMPTY && mp !== PIECE.EMPTY) {
-                                const mpIsWhite = mp === PIECE.WHITE || mp === PIECE.WHITE_KING;
-                                const mpIsBlack = mp === PIECE.BLACK || mp === PIECE.BLACK_KING;
-
-                                if ((pIsWhite && mpIsBlack) || (pIsBlack && mpIsWhite)) {
-                                    anyCaptures = true;
-                                    break;
-                                }
-                            }
+                        if ((isWhite && midIsBlack) || (isBlack && midIsWhite)) {
+                            captures.push({
+                                row: jumpRow,
+                                col: jumpCol,
+                                captured: { row: midRow, col: midCol }
+                            });
                         }
                     }
                 }
-                if (anyCaptures) break;
             }
-            if (anyCaptures) break;
-        }
 
-        // Only get simple moves if no captures available
-        if (!anyCaptures) {
-            for (const [dRow, dCol] of directions) {
-                const newRow = row + dRow;
-                const newCol = col + dCol;
+            // Regular moves only if no captures
+            if (captures.length === 0) {
+                for (const [dRow, dCol] of moveDirections) {
+                    const newRow = row + dRow;
+                    const newCol = col + dCol;
 
-                if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
-                    if (boardState[newRow][newCol] === PIECE.EMPTY) {
-                        moves.push({ row: newRow, col: newCol });
+                    if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                        if (boardState[newRow][newCol] === PIECE.EMPTY) {
+                            moves.push({ row: newRow, col: newCol });
+                        }
                     }
                 }
             }
         }
 
-        return { moves, captures, mustCapture: anyCaptures };
+        // Check if any piece on the board must capture
+        let anyCaptures = false;
+        outerLoop:
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const p = boardState[r][c];
+                if (p === PIECE.EMPTY) continue;
+
+                const pIsWhite = p === PIECE.WHITE || p === PIECE.WHITE_KING;
+                const pIsBlack = p === PIECE.BLACK || p === PIECE.BLACK_KING;
+
+                if ((myColor === 'white' && !pIsWhite) || (myColor === 'black' && !pIsBlack)) continue;
+
+                const { captures: pCaptures } = getMovesForPiece(boardState, r, c, myColor);
+                if (pCaptures.length > 0) {
+                    anyCaptures = true;
+                    break outerLoop;
+                }
+            }
+        }
+
+        // If must capture but this piece has no captures, return empty
+        if (anyCaptures && captures.length === 0) {
+            return { moves: [], captures: [], mustCapture: true };
+        }
+
+        return {
+            moves: anyCaptures ? [] : moves,
+            captures,
+            mustCapture: anyCaptures
+        };
     }, [boardState, myColor]);
 
     // Handle cell click
@@ -177,35 +201,34 @@ export default function useGame() {
 
         const piece = boardState[row][col];
 
-        // If clicking on own piece
+        // Clicking on own piece
         if (piece !== PIECE.EMPTY) {
             const isWhite = piece === PIECE.WHITE || piece === PIECE.WHITE_KING;
             const isBlack = piece === PIECE.BLACK || piece === PIECE.BLACK_KING;
 
             if ((myColor === 'white' && isWhite) || (myColor === 'black' && isBlack)) {
-                // Multi-capture restriction
-                if (multiCaptureState && (multiCaptureState.row !== row || multiCaptureState.col !== col)) {
-                    return; // Must continue with the same piece
+                // If in multi-capture, can only select the capturing piece
+                if (multiCaptureState) {
+                    if (multiCaptureState.row !== row || multiCaptureState.col !== col) {
+                        return;
+                    }
                 }
 
                 const { moves, captures, mustCapture } = getValidMoves(row, col);
 
                 if (moves.length > 0 || captures.length > 0) {
-                    vibrate(20);
                     selectPiece(row, col, moves, captures, mustCapture);
                 }
                 return;
             }
         }
 
-        // If piece selected, try to move
+        // Clicking on destination
         if (selectedPiece) {
             const isValidMove = validMoves.some(m => m.row === row && m.col === col);
             const captureMove = validCaptures.find(c => c.row === row && c.col === col);
 
             if (isValidMove || captureMove) {
-                vibrate(captureMove ? [30, 50, 30] : 30);
-
                 const move = {
                     from: { row: selectedPiece.row, col: selectedPiece.col },
                     to: { row, col }
@@ -230,7 +253,72 @@ export default function useGame() {
         handleCellClick,
         selectedPiece,
         validMoves,
-        validCaptures,
-        mustCapture
+        validCaptures
     };
+}
+
+// Helper function
+function getMovesForPiece(board, row, col, myColor) {
+    const piece = board[row][col];
+    const captures = [];
+
+    if (!piece || piece === PIECE.EMPTY) return { captures: [] };
+
+    const isWhite = piece === PIECE.WHITE || piece === PIECE.WHITE_KING;
+    const isBlack = piece === PIECE.BLACK || piece === PIECE.BLACK_KING;
+    const pieceIsKing = piece === PIECE.WHITE_KING || piece === PIECE.BLACK_KING;
+
+    if ((myColor === 'white' && !isWhite) || (myColor === 'black' && !isBlack)) {
+        return { captures: [] };
+    }
+
+    if (pieceIsKing) {
+        const directions = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+        for (const [dRow, dCol] of directions) {
+            let foundEnemy = null;
+            let distance = 1;
+            while (true) {
+                const newRow = row + dRow * distance;
+                const newCol = col + dCol * distance;
+                if (newRow < 0 || newRow > 7 || newCol < 0 || newCol > 7) break;
+                const targetPiece = board[newRow][newCol];
+                if (targetPiece === PIECE.EMPTY) {
+                    if (foundEnemy) {
+                        captures.push({ row: newRow, col: newCol });
+                    }
+                } else {
+                    const tIsWhite = targetPiece === PIECE.WHITE || targetPiece === PIECE.WHITE_KING;
+                    const tIsBlack = targetPiece === PIECE.BLACK || targetPiece === PIECE.BLACK_KING;
+                    const isEnemy = (isWhite && tIsBlack) || (isBlack && tIsWhite);
+                    if (isEnemy && !foundEnemy) {
+                        foundEnemy = { row: newRow, col: newCol };
+                    } else {
+                        break;
+                    }
+                }
+                distance++;
+            }
+        }
+    } else {
+        const directions = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+        for (const [dRow, dCol] of directions) {
+            const midRow = row + dRow;
+            const midCol = col + dCol;
+            const jumpRow = row + dRow * 2;
+            const jumpCol = col + dCol * 2;
+            if (jumpRow >= 0 && jumpRow < 8 && jumpCol >= 0 && jumpCol < 8) {
+                const midPiece = board[midRow][midCol];
+                const targetPiece = board[jumpRow][jumpCol];
+                if (targetPiece === PIECE.EMPTY && midPiece !== PIECE.EMPTY) {
+                    const mIsWhite = midPiece === PIECE.WHITE || midPiece === PIECE.WHITE_KING;
+                    const mIsBlack = midPiece === PIECE.BLACK || midPiece === PIECE.BLACK_KING;
+                    if ((isWhite && mIsBlack) || (isBlack && mIsWhite)) {
+                        captures.push({ row: jumpRow, col: jumpCol });
+                    }
+                }
+            }
+        }
+    }
+
+    return { captures };
 }
