@@ -5,162 +5,172 @@ import useGameStore from '../stores/gameStore';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:3001';
 
-// SINGLETON socket - persists across component remounts
 let globalSocket = null;
-let isInitialized = false;
 
 export default function useSocket() {
     const [isConnected, setIsConnected] = useState(false);
-    const { token, user } = useUserStore();
-    const gameStore = useGameStore();
+    const { token } = useUserStore();
+    const initialized = useRef(false);
 
     useEffect(() => {
-        if (!token) return;
+        if (!token || initialized.current) return;
 
-        // Only create socket once
-        if (globalSocket && globalSocket.connected) {
+        // Get fresh store reference
+        const gameStore = useGameStore.getState();
+        const userStore = useUserStore.getState();
+
+        console.log('🔌 Initializing socket...');
+        initialized.current = true;
+
+        globalSocket = io(WS_URL, {
+            auth: { token },
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: 50,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 5000,
+            timeout: 20000,
+            forceNew: false
+        });
+
+        globalSocket.on('connect', () => {
+            console.log('✅ Socket connected:', globalSocket.id);
             setIsConnected(true);
-            return;
-        }
+        });
 
-        // If socket exists but disconnected, reconnect
-        if (globalSocket && !globalSocket.connected) {
-            globalSocket.connect();
-            return;
-        }
+        globalSocket.on('disconnect', (reason) => {
+            console.log('❌ Socket disconnected:', reason);
+            setIsConnected(false);
+        });
 
-        // Create new socket only if none exists
-        if (!globalSocket) {
-            console.log('🔌 Creating new socket connection...');
+        globalSocket.on('connect_error', (error) => {
+            console.error('🔴 Connection error:', error.message);
+        });
 
-            globalSocket = io(WS_URL, {
-                auth: { token },
-                transports: ['websocket', 'polling'],
-                reconnection: true,
-                reconnectionAttempts: 20,
-                reconnectionDelay: 1000,
-                reconnectionDelayMax: 5000,
-                timeout: 20000,
-                autoConnect: true
+        // Queue events
+        globalSocket.on('queue:joined', (data) => {
+            console.log('📋 Joined queue:', data);
+            useGameStore.getState().setQueuePosition(data.position);
+            useGameStore.getState().setStatus('queue');
+        });
+
+        globalSocket.on('queue:left', () => {
+            console.log('📋 Left queue');
+            useGameStore.getState().setQueuePosition(null);
+            useGameStore.getState().setStatus('idle');
+        });
+
+        globalSocket.on('queue:error', (data) => {
+            console.error('📋 Queue error:', data.error);
+            useGameStore.getState().setStatus('idle');
+        });
+
+        // Match start
+        globalSocket.on('match:start', (data) => {
+            console.log('🎮 Match started:', data.matchId);
+
+            const store = useGameStore.getState();
+            store.setMatch(data);
+
+            if (data.timerState) {
+                store.setTimer(data.timerState);
+            }
+
+            const user = useUserStore.getState().user;
+            if (user) {
+                store.setMyPlayer(user.telegramId);
+            }
+        });
+
+        // Move result - THIS IS THE KEY FIX
+        globalSocket.on('move:result', (data) => {
+            console.log('♟️ Move result received:', {
+                nextPlayer: data.nextPlayer,
+                turnEnded: data.turnEnded,
+                isBot: data.isBot,
+                multiCapture: data.multiCapture
             });
 
-            // Connection events
-            globalSocket.on('connect', () => {
-                console.log('✅ Socket connected:', globalSocket.id);
-                setIsConnected(true);
-            });
+            const store = useGameStore.getState();
 
-            globalSocket.on('disconnect', (reason) => {
-                console.log('❌ Socket disconnected:', reason);
-                setIsConnected(false);
-
-                // Auto reconnect unless server closed it
-                if (reason === 'io server disconnect') {
-                    globalSocket.connect();
-                }
-            });
-
-            globalSocket.on('connect_error', (error) => {
-                console.error('🔴 Socket connection error:', error.message);
-            });
-
-            // Queue events
-            globalSocket.on('queue:joined', (data) => {
-                console.log('📋 Joined queue:', data);
-                gameStore.setQueuePosition(data.position);
-                gameStore.setStatus('queue');
-            });
-
-            globalSocket.on('queue:left', () => {
-                console.log('📋 Left queue');
-                gameStore.setQueuePosition(null);
-                gameStore.setStatus('idle');
-            });
-
-            globalSocket.on('queue:error', (data) => {
-                console.error('📋 Queue error:', data.error);
-                gameStore.setStatus('idle');
-            });
-
-            // Match events
-            globalSocket.on('match:start', (data) => {
-                console.log('🎮 Match started:', data);
-                gameStore.setMatch(data);
-
-                // Set timer from server
-                if (data.timerState) {
-                    gameStore.setTimer(data.timerState);
-                }
-
-                // Set my player
-                const currentUser = useUserStore.getState().user;
-                if (currentUser) {
-                    gameStore.setMyPlayer(currentUser.telegramId);
-                }
-            });
-
-            globalSocket.on('move:result', (data) => {
-                console.log('♟️ Move result:', data);
+            // Update the board
+            if (data.board) {
                 const nextTurn = data.nextPlayer === 1 ? 'white' : 'black';
-                gameStore.updateBoard(data.board, nextTurn, data.nextPlayer);
-                if (data.timerState) {
-                    gameStore.setTimer(data.timerState);
-                }
-            });
+                store.updateBoard(data.board, nextTurn, data.nextPlayer);
+            }
 
-            globalSocket.on('move:error', (data) => {
-                console.error('♟️ Move error:', data.error);
-            });
+            // Update timer
+            if (data.timerState) {
+                store.setTimer({
+                    ...data.timerState,
+                    activePlayer: data.nextPlayer
+                });
+            }
 
-            globalSocket.on('timer:update', (data) => {
-                gameStore.setTimer(data);
-            });
+            // Handle multi-capture
+            if (data.multiCapture && data.availableCaptures) {
+                store.setMultiCapture({
+                    row: data.availableCaptures[0]?.from?.row,
+                    col: data.availableCaptures[0]?.from?.col
+                });
+            } else {
+                store.setMultiCapture(null);
+            }
 
-            globalSocket.on('match:end', (data) => {
-                console.log('🏁 Match ended:', data);
-                gameStore.setResult(data);
-            });
+            // Clear selection after move
+            store.clearSelection();
+        });
 
-            // Chat events
-            globalSocket.on('chat:message', (data) => {
-                gameStore.addChatMessage(data);
-            });
+        globalSocket.on('move:error', (data) => {
+            console.error('♟️ Move error:', data.error);
+        });
 
-            // Room events
-            globalSocket.on('room:created', (data) => {
-                console.log('🏠 Room created:', data);
-                gameStore.setRoomCode(data.roomCode);
-            });
+        // Timer update
+        globalSocket.on('timer:update', (data) => {
+            useGameStore.getState().setTimer(data);
+        });
 
-            globalSocket.on('room:error', (data) => {
-                console.error('🏠 Room error:', data.error);
-            });
+        // Match end
+        globalSocket.on('match:end', (data) => {
+            console.log('🏁 Match ended:', data);
+            useGameStore.getState().setResult(data);
+        });
 
-            globalSocket.on('room:closed', () => {
-                gameStore.setRoomCode(null);
-            });
+        // Chat
+        globalSocket.on('chat:message', (data) => {
+            useGameStore.getState().addChatMessage(data);
+        });
 
-            // Punishment events
-            globalSocket.on('punishment:show', (data) => {
-                console.log('💀 Punishment:', data);
-            });
+        // Room events
+        globalSocket.on('room:created', (data) => {
+            console.log('🏠 Room created:', data.roomCode);
+            useGameStore.getState().setRoomCode(data.roomCode);
+        });
 
-            isInitialized = true;
-        }
+        globalSocket.on('room:error', (data) => {
+            console.error('🏠 Room error:', data.error);
+        });
 
-        // DO NOT disconnect on cleanup - we want persistent connection!
+        globalSocket.on('room:closed', () => {
+            useGameStore.getState().setRoomCode(null);
+        });
+
+        // Keep alive ping
+        const pingInterval = setInterval(() => {
+            if (globalSocket?.connected) {
+                globalSocket.emit('ping');
+            }
+        }, 25000);
+
         return () => {
-            // Don't disconnect!
+            clearInterval(pingInterval);
         };
     }, [token]);
 
-    // Socket actions
+    // Actions
     const joinQueue = useCallback((betAmount, timerMode) => {
         if (globalSocket?.connected) {
-            console.log('📤 Joining queue:', { betAmount, timerMode });
             globalSocket.emit('queue:join', { betAmount, timerMode });
-        } else {
-            console.error('Socket not connected');
         }
     }, []);
 
@@ -172,7 +182,7 @@ export default function useSocket() {
 
     const makeMove = useCallback((matchId, move) => {
         if (globalSocket?.connected) {
-            console.log('📤 Making move:', { matchId, move });
+            console.log('📤 Sending move:', move);
             globalSocket.emit('move:make', { matchId, move });
         }
     }, []);
@@ -209,10 +219,8 @@ export default function useSocket() {
 
     const startBotMatch = useCallback((betAmount, timerMode) => {
         if (globalSocket?.connected) {
-            console.log('🤖 Starting bot match:', { betAmount, timerMode });
+            console.log('🤖 Starting bot match');
             globalSocket.emit('bot:start', { betAmount, timerMode });
-        } else {
-            console.error('Socket not connected for bot match');
         }
     }, []);
 
