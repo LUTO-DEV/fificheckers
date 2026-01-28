@@ -20,9 +20,9 @@ const useGameStore = create((set, get) => ({
 
     // Timer
     timer: {
-        player1: 0,
-        player2: 0,
-        activePlayer: null
+        player1: 180,
+        player2: 180,
+        activePlayer: 1
     },
 
     // UI State
@@ -46,42 +46,56 @@ const useGameStore = create((set, get) => ({
     roomCode: null,
 
     // Actions
-    setMatch: (match) => set({
-        matchId: match.matchId,
-        boardState: match.boardState,
-        turn: match.turn || 'white',
-        currentPlayer: match.currentPlayer || 1,
-        player1: match.player1,
-        player2: match.player2,
-        betAmount: match.betAmount,
-        timerMode: match.timerMode,
-        isBot: match.isBot || match.player2?.isBot || false,
-        status: 'playing',
-        result: null,
-        selectedPiece: null,
-        validMoves: [],
-        validCaptures: [],
-        chatMessages: []
-    }),
+    setMatch: (match) => {
+        console.log('🎮 Setting match in store:', match);
+        set({
+            matchId: match.matchId,
+            boardState: match.boardState,
+            turn: match.turn || 'white',
+            currentPlayer: match.currentPlayer || 1,
+            player1: match.player1,
+            player2: match.player2,
+            betAmount: match.betAmount,
+            timerMode: match.timerMode,
+            isBot: match.isBot || match.player2?.isBot || false,
+            status: 'playing',
+            result: null,
+            selectedPiece: null,
+            validMoves: [],
+            validCaptures: [],
+            chatMessages: [],
+            timer: match.timerState || {
+                player1: 180,
+                player2: 180,
+                activePlayer: 1
+            }
+        });
+    },
 
     setMyPlayer: (telegramId) => {
         const state = get();
         const playerNum = state.player1?.telegramId === telegramId ? 1 : 2;
         const color = playerNum === 1 ? 'white' : 'black';
+        console.log(`👤 Setting my player: ${playerNum} (${color})`);
         set({ myPlayerNum: playerNum, myColor: color });
     },
 
-    updateBoard: (boardState, turn, currentPlayer) => set({
-        boardState,
-        turn,
-        currentPlayer,
-        selectedPiece: null,
-        validMoves: [],
-        validCaptures: [],
-        multiCaptureState: null
-    }),
+    updateBoard: (boardState, turn, currentPlayer) => {
+        console.log(`📋 Updating board: turn=${turn}, currentPlayer=${currentPlayer}`);
+        set({
+            boardState,
+            turn,
+            currentPlayer,
+            selectedPiece: null,
+            validMoves: [],
+            validCaptures: [],
+            multiCaptureState: null
+        });
+    },
 
-    setTimer: (timer) => set({ timer }),
+    setTimer: (timer) => {
+        set({ timer });
+    },
 
     selectPiece: (row, col, moves, captures, mustCapture) => set({
         selectedPiece: { row, col },
@@ -99,10 +113,13 @@ const useGameStore = create((set, get) => ({
 
     setMultiCapture: (state) => set({ multiCaptureState: state }),
 
-    setResult: (result) => set({
-        status: 'finished',
-        result
-    }),
+    setResult: (result) => {
+        console.log('🏁 Setting result:', result);
+        set({
+            status: 'finished',
+            result
+        });
+    },
 
     addChatMessage: (message) => set((state) => ({
         chatMessages: [...state.chatMessages, message].slice(-50)
@@ -110,7 +127,10 @@ const useGameStore = create((set, get) => ({
 
     setQueuePosition: (position) => set({ queuePosition: position }),
 
-    setRoomCode: (code) => set({ roomCode: code }),
+    setRoomCode: (code) => {
+        console.log('🏠 Setting room code:', code);
+        set({ roomCode: code });
+    },
 
     setStatus: (status) => set({ status }),
 
@@ -130,7 +150,7 @@ const useGameStore = create((set, get) => ({
         betAmount: 0,
         timerMode: 'BLITZ',
         isBot: false,
-        timer: { player1: 0, player2: 0, activePlayer: null },
+        timer: { player1: 180, player2: 180, activePlayer: 1 },
         selectedPiece: null,
         validMoves: [],
         validCaptures: [],

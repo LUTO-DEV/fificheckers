@@ -38,7 +38,7 @@ export default function Home() {
     };
 
     return (
-        <div className="flex flex-col h-full bg-obsidian-950">
+        <div className="flex flex-col h-full bg-luxury-black">
             <Header showProfile={false} />
 
             <main className="flex-1 overflow-y-auto hide-scrollbar">
@@ -47,22 +47,22 @@ export default function Home() {
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="text-center py-8"
+                        className="text-center py-6"
                     >
                         <motion.div
-                            animate={{ y: [0, -10, 0] }}
-                            transition={{ duration: 2, repeat: Infinity }}
-                            className="text-7xl mb-4"
+                            animate={{ y: [0, -8, 0] }}
+                            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                            className="text-6xl mb-4"
                         >
                             ♟️
                         </motion.div>
 
-                        <h1 className="text-4xl font-display font-bold bg-gradient-to-r from-violet-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                        <h1 className="text-4xl font-display font-bold gradient-gold-text">
                             FiFi Checkers
                         </h1>
 
-                        <p className="text-obsidian-400 mt-2">
-                            Play, Bet, Win!
+                        <p className="text-luxury-text mt-2 text-sm">
+                            Play • Bet • Win
                         </p>
                     </motion.div>
 
@@ -72,19 +72,15 @@ export default function Home() {
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ delay: 0.1 }}
-                            className="p-5 rounded-3xl bg-gradient-to-br from-obsidian-800 to-obsidian-900 border border-obsidian-700"
+                            className="p-5 rounded-2xl bg-luxury-card border border-luxury-border"
                         >
                             <div className="flex items-center gap-4 mb-4">
-                                <div className="w-16 h-16 rounded-2xl bg-obsidian-700 flex items-center justify-center text-2xl">
-                                    {user.avatarUrl ? (
-                                        <img src={user.avatarUrl} alt="" className="w-full h-full rounded-2xl object-cover" />
-                                    ) : (
-                                        '👤'
-                                    )}
+                                <div className="w-14 h-14 rounded-2xl bg-luxury-muted flex items-center justify-center text-2xl border border-luxury-border">
+                                    👤
                                 </div>
 
                                 <div className="flex-1">
-                                    <h2 className="text-xl font-semibold text-white">{user.username}</h2>
+                                    <h2 className="text-lg font-semibold text-luxury-white">{user.username}</h2>
                                     <div className="flex items-center gap-2 mt-1">
                                         <RankBadge rank={user.rank} size="sm" />
                                         <CoinDisplay coins={user.coins} size="sm" />
@@ -93,17 +89,17 @@ export default function Home() {
                             </div>
 
                             <div className="grid grid-cols-3 gap-3">
-                                <div className="p-3 rounded-xl bg-obsidian-800 text-center">
-                                    <p className="text-2xl font-bold text-green-400">{user.wins}</p>
-                                    <p className="text-xs text-obsidian-400">Wins</p>
+                                <div className="p-3 rounded-xl bg-luxury-dark border border-luxury-border text-center">
+                                    <p className="text-xl font-bold text-emerald-400">{user.wins}</p>
+                                    <p className="text-xs text-luxury-text">Wins</p>
                                 </div>
-                                <div className="p-3 rounded-xl bg-obsidian-800 text-center">
-                                    <p className="text-2xl font-bold text-red-400">{user.losses}</p>
-                                    <p className="text-xs text-obsidian-400">Losses</p>
+                                <div className="p-3 rounded-xl bg-luxury-dark border border-luxury-border text-center">
+                                    <p className="text-xl font-bold text-red-400">{user.losses}</p>
+                                    <p className="text-xs text-luxury-text">Losses</p>
                                 </div>
-                                <div className="p-3 rounded-xl bg-obsidian-800 text-center">
-                                    <p className="text-2xl font-bold text-yellow-400">{user.winStreak}</p>
-                                    <p className="text-xs text-obsidian-400">Streak</p>
+                                <div className="p-3 rounded-xl bg-luxury-dark border border-luxury-border text-center">
+                                    <p className="text-xl font-bold text-gold-400">{user.winStreak}</p>
+                                    <p className="text-xs text-luxury-text">Streak</p>
                                 </div>
                             </div>
                         </motion.div>
@@ -158,7 +154,7 @@ export default function Home() {
                         </div>
                     </motion.div>
 
-                    {/* Quick Stats */}
+                    {/* Quick Links */}
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -167,20 +163,20 @@ export default function Home() {
                     >
                         <button
                             onClick={() => navigate('/leaderboard')}
-                            className="p-4 rounded-2xl bg-obsidian-800/50 border border-obsidian-700 text-left hover:border-violet-500/50 transition-colors"
+                            className="p-4 rounded-2xl bg-luxury-card border border-luxury-border text-left hover:border-gold-500/30 transition-colors"
                         >
                             <span className="text-2xl">🏆</span>
-                            <p className="font-semibold text-white mt-2">Leaderboard</p>
-                            <p className="text-xs text-obsidian-400">Top 50 players</p>
+                            <p className="font-semibold text-luxury-white mt-2">Leaderboard</p>
+                            <p className="text-xs text-luxury-text">Top 50 players</p>
                         </button>
 
                         <button
                             onClick={() => navigate('/friends')}
-                            className="p-4 rounded-2xl bg-obsidian-800/50 border border-obsidian-700 text-left hover:border-violet-500/50 transition-colors"
+                            className="p-4 rounded-2xl bg-luxury-card border border-luxury-border text-left hover:border-gold-500/30 transition-colors"
                         >
                             <span className="text-2xl">👥</span>
-                            <p className="font-semibold text-white mt-2">Friends</p>
-                            <p className="text-xs text-obsidian-400">Challenge them!</p>
+                            <p className="font-semibold text-luxury-white mt-2">Friends</p>
+                            <p className="text-xs text-luxury-text">Challenge them!</p>
                         </button>
                     </motion.div>
                 </div>
@@ -204,24 +200,24 @@ export default function Home() {
                         <motion.div
                             animate={{ rotate: [0, 10, -10, 0], scale: [1, 1.2, 1] }}
                             transition={{ duration: 0.5 }}
-                            className="text-6xl mb-4"
+                            className="text-5xl mb-4"
                         >
                             🎉
                         </motion.div>
-                        <p className="text-xl font-bold text-green-400">+20 Coins!</p>
+                        <p className="text-xl font-bold text-emerald-400">+20 Coins!</p>
                     </motion.div>
                 ) : (
                     <div className="text-center space-y-4">
                         <motion.div
                             animate={{ y: [0, -5, 0] }}
-                            transition={{ duration: 1, repeat: Infinity }}
+                            transition={{ duration: 1.5, repeat: Infinity }}
                             className="text-5xl"
                         >
                             🪙
                         </motion.div>
 
-                        <p className="text-obsidian-300">
-                            Claim your daily bonus of <span className="text-yellow-400 font-bold">20 coins</span>!
+                        <p className="text-luxury-light">
+                            Claim your daily bonus of <span className="text-gold-400 font-bold">20 coins</span>!
                         </p>
 
                         <Button

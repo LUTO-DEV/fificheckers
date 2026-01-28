@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion';
 import Timer from './Timer';
-import RankBadge from './RankBadge';
 
 export default function PlayerCard({
     player,
@@ -15,21 +14,22 @@ export default function PlayerCard({
             initial={{ opacity: 0, y: isMe ? 20 : -20 }}
             animate={{ opacity: 1, y: 0 }}
             className={`
-        flex items-center justify-between p-3 rounded-2xl
-        ${isActive ? 'bg-violet-500/10 border border-violet-500/30' : 'bg-obsidian-800/50'}
+        flex items-center justify-between p-3 rounded-2xl border
+        ${isActive
+                    ? 'bg-gold-500/5 border-gold-500/30'
+                    : 'bg-luxury-card/50 border-luxury-border'
+                }
         transition-all duration-300
       `}
         >
             <div className="flex items-center gap-3">
                 {/* Avatar */}
                 <div className={`
-          w-12 h-12 rounded-xl flex items-center justify-center text-2xl
-          ${color === 'white' ? 'bg-white/10' : 'bg-black/30'}
-          border-2 ${isActive ? 'border-violet-500' : 'border-obsidian-700'}
+          w-11 h-11 rounded-xl flex items-center justify-center text-xl
+          ${color === 'white' ? 'bg-luxury-white/10' : 'bg-luxury-black/50'}
+          border ${isActive ? 'border-gold-500/50' : 'border-luxury-border'}
         `}>
-                    {player?.isBot ? '🤖' : player?.avatarUrl ? (
-                        <img src={player.avatarUrl} alt="" className="w-full h-full rounded-xl object-cover" />
-                    ) : (
+                    {player?.isBot ? '🤖' : (
                         <span>{color === 'white' ? '⚪' : '⚫'}</span>
                     )}
                 </div>
@@ -37,36 +37,27 @@ export default function PlayerCard({
                 {/* Info */}
                 <div className="flex flex-col">
                     <div className="flex items-center gap-2">
-                        <span className={`font-semibold ${isMe ? 'text-violet-400' : 'text-white'}`}>
+                        <span className={`font-medium text-sm ${isMe ? 'text-gold-400' : 'text-luxury-white'}`}>
                             {player?.username || 'Player'}
                         </span>
                         {isMe && (
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gold-500/20 text-gold-400 font-medium">
                                 YOU
                             </span>
                         )}
                     </div>
 
-                    {player?.rank && (
-                        <RankBadge rank={player.rank} size="sm" showName={false} />
+                    {/* Captured pieces */}
+                    {captured > 0 && (
+                        <div className="flex items-center gap-1 text-xs text-luxury-text mt-0.5">
+                            <span>Captured: {captured}</span>
+                        </div>
                     )}
                 </div>
             </div>
 
-            <div className="flex items-center gap-3">
-                {/* Captured pieces */}
-                {captured > 0 && (
-                    <div className="flex items-center gap-1 text-sm text-obsidian-400">
-                        <span>×{captured}</span>
-                        <span className={color === 'white' ? 'text-gray-800' : 'text-gray-200'}>
-                            {color === 'white' ? '⚫' : '⚪'}
-                        </span>
-                    </div>
-                )}
-
-                {/* Timer */}
-                <Timer time={timer} isActive={isActive} isMyTimer={isMe} />
-            </div>
+            {/* Timer */}
+            <Timer time={timer} isActive={isActive} isMyTimer={isMe} />
         </motion.div>
     );
 }

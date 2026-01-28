@@ -5,7 +5,7 @@ import useGameStore from '../stores/gameStore';
 import { PIECE } from '../utils/constants';
 
 export default function Board() {
-    const { boardState } = useGameStore();
+    const { boardState, currentPlayer, myPlayerNum } = useGameStore();
     const {
         handleCellClick,
         selectedPiece,
@@ -29,13 +29,13 @@ export default function Board() {
         <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="relative aspect-square w-full max-w-[400px] mx-auto"
+            className="relative aspect-square w-full max-w-[360px] mx-auto"
         >
-            {/* Board container with glow effect */}
+            {/* Board container */}
             <div className={`
-        absolute inset-0 rounded-2xl overflow-hidden
-        ${isMyTurn ? 'shadow-neon' : 'shadow-lg shadow-black/50'}
-        transition-shadow duration-500
+        absolute inset-0 rounded-2xl overflow-hidden border-2
+        ${isMyTurn ? 'border-gold-500/50 shadow-gold' : 'border-luxury-border shadow-xl shadow-black/50'}
+        transition-all duration-500
       `}>
                 {/* Grid */}
                 <div className="grid grid-cols-8 grid-rows-8 w-full h-full">
@@ -54,28 +54,27 @@ export default function Board() {
                     relative flex items-center justify-center
                     ${isDark ? 'cell-dark' : 'cell-light'}
                     ${isSelectedCell ? 'cell-selected' : ''}
-                    ${isValidMoveCell ? 'cell-highlight' : ''}
+                    ${isValidMoveCell && !isValidCaptureCell ? 'cell-highlight' : ''}
                     ${isValidCaptureCell ? 'cell-capture' : ''}
-                    cursor-pointer transition-all duration-200
+                    cursor-pointer transition-all duration-150
                   `}
-                                    whileHover={{ brightness: 1.1 }}
                                 >
-                                    {/* Valid move indicator */}
+                                    {/* Valid move dot */}
                                     {isValidMoveCell && !isValidCaptureCell && (
                                         <motion.div
                                             initial={{ scale: 0 }}
                                             animate={{ scale: 1 }}
-                                            className="absolute w-1/3 h-1/3 rounded-full bg-violet-500/50"
+                                            className="absolute w-3 h-3 rounded-full bg-gold-500/60"
                                         />
                                     )}
 
-                                    {/* Valid capture indicator */}
+                                    {/* Valid capture ring */}
                                     {isValidCaptureCell && (
                                         <motion.div
                                             initial={{ scale: 0 }}
-                                            animate={{ scale: [1, 1.2, 1] }}
-                                            transition={{ duration: 0.5, repeat: Infinity }}
-                                            className="absolute w-2/3 h-2/3 rounded-full border-4 border-red-500/70"
+                                            animate={{ scale: [1, 1.1, 1] }}
+                                            transition={{ duration: 0.6, repeat: Infinity }}
+                                            className="absolute w-3/4 h-3/4 rounded-full border-3 border-red-500/80"
                                         />
                                     )}
 
@@ -91,29 +90,15 @@ export default function Board() {
                         })
                     )}
                 </div>
-
-                {/* Row labels */}
-                <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-around pl-1 pointer-events-none">
-                    {[8, 7, 6, 5, 4, 3, 2, 1].map(n => (
-                        <span key={n} className="text-[10px] text-obsidian-500 font-mono">{n}</span>
-                    ))}
-                </div>
-
-                {/* Column labels */}
-                <div className="absolute bottom-0 left-0 right-0 flex justify-around pb-0.5 pointer-events-none">
-                    {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(l => (
-                        <span key={l} className="text-[10px] text-obsidian-500 font-mono">{l}</span>
-                    ))}
-                </div>
             </div>
 
-            {/* Turn indicator overlay */}
+            {/* Turn indicator */}
             {!isMyTurn && (
-                <div className="absolute inset-0 bg-black/20 rounded-2xl pointer-events-none flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/30 rounded-2xl pointer-events-none flex items-center justify-center">
                     <motion.div
-                        animate={{ opacity: [0.5, 1, 0.5] }}
+                        animate={{ opacity: [0.7, 1, 0.7] }}
                         transition={{ duration: 1.5, repeat: Infinity }}
-                        className="text-lg font-medium text-white bg-obsidian-900/80 px-4 py-2 rounded-xl"
+                        className="text-sm font-medium text-luxury-white bg-luxury-dark/90 px-4 py-2 rounded-xl border border-luxury-border"
                     >
                         Opponent's turn...
                     </motion.div>

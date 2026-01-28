@@ -12,9 +12,12 @@ export default function BottomNav() {
     const location = useLocation();
     const navigate = useNavigate();
 
+    // Don't show on game page
+    if (location.pathname === '/game') return null;
+
     return (
         <nav className="safe-area-bottom">
-            <div className="flex items-center justify-around px-2 py-2 glass border-t border-obsidian-800">
+            <div className="flex items-center justify-around px-2 py-2 bg-luxury-dark/95 backdrop-blur-lg border-t border-luxury-border">
                 {navItems.map((item) => {
                     const isActive = location.pathname === item.path;
 
@@ -23,9 +26,9 @@ export default function BottomNav() {
                             key={item.path}
                             whileTap={{ scale: 0.9 }}
                             onClick={() => navigate(item.path)}
-                            className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-colors ${isActive
-                                    ? 'text-violet-400 bg-violet-500/10'
-                                    : 'text-obsidian-400 hover:text-white'
+                            className={`relative flex flex-col items-center gap-1 px-5 py-2 rounded-xl transition-all ${isActive
+                                    ? 'text-gold-400'
+                                    : 'text-luxury-text hover:text-luxury-white'
                                 }`}
                         >
                             <span className="text-xl">{item.icon}</span>
@@ -34,7 +37,7 @@ export default function BottomNav() {
                             {isActive && (
                                 <motion.div
                                     layoutId="activeTab"
-                                    className="absolute -bottom-1 w-1 h-1 rounded-full bg-violet-500"
+                                    className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-gold-500"
                                 />
                             )}
                         </motion.button>

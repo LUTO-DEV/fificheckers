@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import Button from './Button';
@@ -5,30 +6,22 @@ import CoinDisplay from './CoinDisplay';
 import RankBadge from './RankBadge';
 import useGameStore from '../stores/gameStore';
 import useUserStore from '../stores/userStore';
-import useAudio from '../hooks/useAudio';
-import { useEffect } from 'react';
 
 export default function MatchResult() {
     const navigate = useNavigate();
     const { result, reset } = useGameStore();
     const { user, updateUser } = useUserStore();
-    const { playWin, playLose } = useAudio();
 
     const isWinner = result?.winner?.telegramId === user?.telegramId;
 
     useEffect(() => {
-        if (isWinner) {
-            playWin();
-            if (result.winner.newStats) {
-                updateUser(result.winner.newStats);
-            }
-        } else {
-            playLose();
-            if (result.loser.newStats) {
-                updateUser(result.loser.newStats);
-            }
+        // Update user stats from result
+        if (isWinner && result.winner.newStats) {
+            updateUser(result.winner.newStats);
+        } else if (!isWinner && result.loser?.newStats) {
+            updateUser(result.loser.newStats);
         }
-    }, []);
+    }, [result, isWinner, updateUser]);
 
     const handlePlayAgain = () => {
         reset();
@@ -46,19 +39,19 @@ export default function MatchResult() {
         <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90"
         >
             <motion.div
                 initial={{ scale: 0.8, y: 50 }}
                 animate={{ scale: 1, y: 0 }}
-                transition={{ type: 'spring', damping: 15 }}
-                className="w-full max-w-sm glass rounded-3xl border border-obsidian-700 overflow-hidden"
+                transition={{ type: 'spring', damping: 20 }}
+                className="w-full max-w-sm bg-luxury-dark rounded-2xl border border-luxury-border overflow-hidden"
             >
                 {/* Header */}
                 <div className={`
           py-8 px-6 text-center
           ${isWinner
-                        ? 'bg-gradient-to-b from-yellow-500/20 to-transparent'
+                        ? 'bg-gradient-to-b from-gold-500/20 to-transparent'
                         : 'bg-gradient-to-b from-red-500/20 to-transparent'
                     }
         `}>
@@ -75,7 +68,7 @@ export default function MatchResult() {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.3 }}
-                        className={`text-3xl font-display font-bold ${isWinner ? 'text-yellow-400' : 'text-red-400'}`}
+                        className={`text-3xl font-display font-bold ${isWinner ? 'text-gold-400' : 'text-red-400'}`}
                     >
                         {isWinner ? 'VICTORY!' : 'DEFEAT'}
                     </motion.h2>
@@ -84,7 +77,7 @@ export default function MatchResult() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         transition={{ delay: 0.4 }}
-                        className="text-obsidian-400 mt-2"
+                        className="text-luxury-text text-sm mt-2"
                     >
                         {result.reason === 'timeout' && 'Time ran out'}
                         {result.reason === 'resign' && 'Opponent resigned'}
@@ -102,9 +95,9 @@ export default function MatchResult() {
                             initial={{ opacity: 0, x: -20 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: 0.5 }}
-                            className="flex items-center justify-between p-4 rounded-xl bg-obsidian-800"
+                            className="flex items-center justify-between p-4 rounded-xl bg-luxury-card border border-luxury-border"
                         >
-                            <span className="text-obsidian-300">Coins</span>
+                            <span className="text-luxury-text">Coins</span>
                             <CoinDisplay
                                 coins={isWinner ? result.coinsWon : -result.betAmount}
                                 showPlus={isWinner}
@@ -113,30 +106,30 @@ export default function MatchResult() {
                         </motion.div>
                     )}
 
-                    {/* New Stats */}
+                    {/* Stats Grid */}
                     <motion.div
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         transition={{ delay: 0.6 }}
                         className="grid grid-cols-3 gap-3"
                     >
-                        <div className="p-3 rounded-xl bg-obsidian-800 text-center">
-                            <p className="text-2xl font-bold text-white">
-                                {isWinner ? result.winner.newStats?.wins : result.loser.newStats?.losses}
+                        <div className="p-3 rounded-xl bg-luxury-card border border-luxury-border text-center">
+                            <p className="text-xl font-bold text-luxury-white">
+                                {isWinner ? result.winner.newStats?.wins : result.loser?.newStats?.losses}
                             </p>
-                            <p className="text-xs text-obsidian-400">{isWinner ? 'Wins' : 'Losses'}</p>
+                            <p className="text-xs text-luxury-text">{isWinner ? 'Wins' : 'Losses'}</p>
                         </div>
 
-                        <div className="p-3 rounded-xl bg-obsidian-800 text-center">
-                            <p className="text-2xl font-bold text-white">{result.totalMoves}</p>
-                            <p className="text-xs text-obsidian-400">Moves</p>
+                        <div className="p-3 rounded-xl bg-luxury-card border border-luxury-border text-center">
+                            <p className="text-xl font-bold text-luxury-white">{result.totalMoves}</p>
+                            <p className="text-xs text-luxury-text">Moves</p>
                         </div>
 
-                        <div className="p-3 rounded-xl bg-obsidian-800 text-center">
-                            <p className="text-2xl font-bold text-white">
-                                {isWinner ? result.winner.newStats?.winStreak : 0}
+                        <div className="p-3 rounded-xl bg-luxury-card border border-luxury-border text-center">
+                            <p className="text-xl font-bold text-gold-400">
+                                {isWinner ? result.winner.newStats?.winStreak || 0 : 0}
                             </p>
-                            <p className="text-xs text-obsidian-400">Streak</p>
+                            <p className="text-xs text-luxury-text">Streak</p>
                         </div>
                     </motion.div>
 

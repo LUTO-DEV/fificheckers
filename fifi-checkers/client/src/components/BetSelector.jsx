@@ -9,7 +9,7 @@ export default function BetSelector({ value, onChange }) {
 
     return (
         <div className="space-y-3">
-            <label className="text-sm font-medium text-obsidian-300">Bet Amount</label>
+            <label className="text-sm font-medium text-luxury-text">Bet Amount</label>
 
             <div className="grid grid-cols-4 gap-2">
                 {BET_OPTIONS.map((amount) => {
@@ -23,20 +23,20 @@ export default function BetSelector({ value, onChange }) {
                             onClick={() => canAfford && onChange(amount)}
                             disabled={!canAfford}
                             className={`
-                relative py-3 rounded-xl font-semibold text-sm transition-all
+                relative py-3 rounded-xl font-semibold text-sm transition-all border
                 ${isSelected
-                                    ? 'bg-violet-600 text-white border-2 border-violet-400'
+                                    ? 'bg-gold-500/20 text-gold-400 border-gold-500/50'
                                     : canAfford
-                                        ? 'bg-obsidian-800 text-white border-2 border-obsidian-700 hover:border-violet-500'
-                                        : 'bg-obsidian-900 text-obsidian-600 border-2 border-obsidian-800 cursor-not-allowed'
+                                        ? 'bg-luxury-card text-luxury-white border-luxury-border hover:border-gold-500/30'
+                                        : 'bg-luxury-dark text-luxury-muted border-luxury-border cursor-not-allowed opacity-50'
                                 }
               `}
                         >
                             {amount === 0 ? (
-                                <span className="text-green-400">FREE</span>
+                                <span className="text-emerald-400">FREE</span>
                             ) : (
                                 <span className="flex items-center justify-center gap-1">
-                                    <span className="text-yellow-400">🪙</span>
+                                    <span>🪙</span>
                                     {formatCoins(amount)}
                                 </span>
                             )}
@@ -44,7 +44,7 @@ export default function BetSelector({ value, onChange }) {
                             {isSelected && (
                                 <motion.div
                                     layoutId="betIndicator"
-                                    className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-xs"
+                                    className="absolute -top-1 -right-1 w-4 h-4 bg-gold-500 rounded-full flex items-center justify-center text-[10px] text-black font-bold"
                                 >
                                     ✓
                                 </motion.div>
@@ -55,8 +55,8 @@ export default function BetSelector({ value, onChange }) {
             </div>
 
             {value > 0 && (
-                <p className="text-xs text-obsidian-400 text-center">
-                    Win: <span className="text-green-400 font-semibold">+{formatCoins(value * 2)} 🪙</span>
+                <p className="text-xs text-luxury-text text-center">
+                    Win: <span className="text-emerald-400 font-semibold">+{formatCoins(value * 2)} 🪙</span>
                 </p>
             )}
         </div>

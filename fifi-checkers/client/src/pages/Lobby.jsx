@@ -16,23 +16,34 @@ export default function Lobby() {
     const navigate = useNavigate();
     const location = useLocation();
     const { user } = useUserStore();
-    const { status, setStatus, setBetAmount, setTimerMode, reset } = useGameStore();
-    const { joinQueue, leaveQueue, createRoom, joinRoom, startBotMatch } = useSocket();
+    const { status, roomCode, setStatus, setBetAmount, setTimerMode, reset } = useGameStore();
+    const { joinQueue, leaveQueue, createRoom, joinRoom, closeRoom, startBotMatch } = useSocket();
     const { hapticFeedback, shareUrl } = useTelegram();
 
     const [bet, setBet] = useState(0);
     const [timer, setTimer] = useState('BLITZ');
     const [mode, setMode] = useState(location.state?.mode || 'online');
-    const [roomCode, setRoomCode] = useState('');
-    const [createdRoomCode, setCreatedRoomCode] = useState(null);
+    const [inputRoomCode, setInputRoomCode] = useState('');
     const [showJoinModal, setShowJoinModal] = useState(false);
+    const [waitingForFriend, setWaitingForFriend] = useState(false);
 
+    // Navigate to game when match starts
     useEffect(() => {
         if (status === 'playing') {
+            console.log('🎮 Match started, navigating to game...');
             navigate('/game');
         }
     }, [status, navigate]);
 
+    // Watch for room code
+    useEffect(() => {
+        if (roomCode) {
+            console.log('🏠 Room code received:', roomCode);
+            setWaitingForFriend(true);
+        }
+    }, [roomCode]);
+
+    // Cleanup on unmount
     useEffect(() => {
         return () => {
             if (status === 'queue') {
@@ -52,7 +63,9 @@ export default function Lobby() {
         } else if (mode === 'bot') {
             startBotMatch(bet, timer);
         } else if (mode === 'friend') {
-            createRoom(bet, timer);
+            if (!roomCode) {
+                createRoom(bet, timer);
+            }
         }
     };
 
@@ -62,31 +75,49 @@ export default function Lobby() {
         setStatus('idle');
     };
 
-    const handleJoinRoom = () => {
-        if (roomCode.length !== 6) return;
+    const handleCancelRoom = () => {
         hapticFeedback();
-        joinRoom(roomCode.toUpperCase());
+        if (roomCode) {
+            closeRoom(roomCode);
+        }
+        setWaitingForFriend(false);
+        reset();
+    };
+
+    const handleJoinRoom = () => {
+        if (inputRoomCode.length !== 6) return;
+        hapticFeedback();
+        setBetAmount(bet);
+        setTimerMode(timer);
+        joinRoom(inputRoomCode.toUpperCase());
+        setShowJoinModal(false);
+    };
+
+    const handleCopyCode = () => {
+        if (!roomCode) return;
+        navigator.clipboard.writeText(roomCode);
+        hapticFeedback('notification');
     };
 
     const handleShareRoom = () => {
-        if (!createdRoomCode) return;
-        const url = `https://t.me/your_bot?start=room_${createdRoomCode}`;
-        shareUrl(url, `Join my FiFi Checkers game! Room: ${createdRoomCode}`);
+        if (!roomCode) return;
+        hapticFeedback();
+        const url = `https://t.me/your_bot?start=room_${roomCode}`;
+        shareUrl(url, `Join my FiFi Checkers game! 🎮\nRoom Code: ${roomCode}`);
     };
 
-    // Listen for room creation
-    useEffect(() => {
-        if (status === 'idle' && mode === 'friend') {
-            // Room was created, waiting for guest
-        }
-    }, [status, mode]);
-
     return (
-        <div className="flex flex-col h-full bg-obsidian-950">
+        <div className="flex flex-col h-full bg-luxury-black">
             <Header
                 title="Game Lobby"
                 showBack
-                onBack={() => navigate('/')}
+                onBack={() => {
+                    if (roomCode) {
+                        closeRoom(roomCode);
+                    }
+                    reset();
+                    navigate('/');
+                }}
                 showProfile
             />
 
@@ -94,7 +125,7 @@ export default function Lobby() {
                 <div className="max-w-md mx-auto space-y-6">
                     {/* Mode Selector */}
                     <div className="space-y-3">
-                        <label className="text-sm font-medium text-obsidian-300">Game Mode</label>
+                        <label className="text-sm font-medium text-luxury-text">Game Mode</label>
 
                         <div className="grid grid-cols-3 gap-2">
                             {[
@@ -108,12 +139,16 @@ export default function Lobby() {
                                     onClick={() => {
                                         hapticFeedback('selection');
                                         setMode(m.id);
+                                        setWaitingForFriend(false);
+                                        if (roomCode) {
+                                            closeRoom(roomCode);
+                                        }
                                     }}
                                     className={`
-                    p-4 rounded-xl text-center transition-all
+                    p-4 rounded-xl text-center transition-all border
                     ${mode === m.id
-                                            ? 'bg-violet-600 text-white border-2 border-violet-400'
-                                            : 'bg-obsidian-800 text-obsidian-300 border-2 border-obsidian-700 hover:border-violet-500'
+                                            ? 'bg-gold-500/10 text-gold-400 border-gold-500/50'
+                                            : 'bg-luxury-card text-luxury-light border-luxury-border hover:border-gold-500/30'
                                         }
                   `}
                                 >
@@ -126,7 +161,7 @@ export default function Lobby() {
 
                     {/* Timer Selector */}
                     <div className="space-y-3">
-                        <label className="text-sm font-medium text-obsidian-300">Time Control</label>
+                        <label className="text-sm font-medium text-luxury-text">Time Control</label>
 
                         <div className="grid grid-cols-3 gap-2">
                             {Object.entries(TIMER_MODES).map(([key, value]) => (
@@ -138,16 +173,16 @@ export default function Lobby() {
                                         setTimer(key);
                                     }}
                                     className={`
-                    p-4 rounded-xl text-center transition-all
+                    p-4 rounded-xl text-center transition-all border
                     ${timer === key
-                                            ? 'bg-violet-600 text-white border-2 border-violet-400'
-                                            : 'bg-obsidian-800 text-obsidian-300 border-2 border-obsidian-700 hover:border-violet-500'
+                                            ? 'bg-gold-500/10 text-gold-400 border-gold-500/50'
+                                            : 'bg-luxury-card text-luxury-light border-luxury-border hover:border-gold-500/30'
                                         }
                   `}
                                 >
                                     <span className="text-xl block mb-1">{value.icon}</span>
                                     <span className="text-sm font-medium">{value.name}</span>
-                                    <span className="text-xs text-obsidian-400 block">
+                                    <span className="text-xs text-luxury-text block">
                                         {Math.floor(value.time / 60)} min
                                     </span>
                                 </motion.button>
@@ -158,7 +193,7 @@ export default function Lobby() {
                     {/* Bet Selector */}
                     <BetSelector value={bet} onChange={setBet} />
 
-                    {/* Bot difficulty note */}
+                    {/* Bot warning */}
                     {mode === 'bot' && (
                         <motion.div
                             initial={{ opacity: 0, y: 10 }}
@@ -166,38 +201,76 @@ export default function Lobby() {
                             className="p-4 rounded-xl bg-red-500/10 border border-red-500/30"
                         >
                             <div className="flex items-center gap-2 text-red-400">
-                                <span className="text-xl">⚠️</span>
-                                <span className="font-medium">Warning: Undefeated Bot</span>
+                                <span className="text-lg">⚠️</span>
+                                <span className="font-medium text-sm">Warning: Undefeated Bot</span>
                             </div>
-                            <p className="text-sm text-red-400/70 mt-1">
+                            <p className="text-xs text-red-400/70 mt-1">
                                 FiFi Bot plays perfectly. Can you beat it?
                             </p>
                         </motion.div>
                     )}
 
-                    {/* Friend mode options */}
+                    {/* Friend Room Display - THIS IS THE FIX! */}
                     {mode === 'friend' && (
                         <motion.div
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             className="space-y-3"
                         >
-                            {createdRoomCode ? (
-                                <div className="p-4 rounded-xl bg-obsidian-800 border border-obsidian-700 text-center">
-                                    <p className="text-sm text-obsidian-400 mb-2">Share this code:</p>
-                                    <p className="text-3xl font-mono font-bold text-violet-400 tracking-widest">
-                                        {createdRoomCode}
-                                    </p>
+                            {waitingForFriend && roomCode ? (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="p-5 rounded-xl bg-luxury-card border border-gold-500/30 text-center"
+                                >
+                                    <p className="text-sm text-luxury-text mb-3">Share this code with your friend:</p>
+
+                                    <motion.p
+                                        className="text-4xl font-mono font-bold text-gold-400 tracking-[0.3em] mb-4"
+                                        animate={{ scale: [1, 1.02, 1] }}
+                                        transition={{ duration: 2, repeat: Infinity }}
+                                    >
+                                        {roomCode}
+                                    </motion.p>
+
+                                    <div className="flex gap-2">
+                                        <Button
+                                            onClick={handleCopyCode}
+                                            variant="secondary"
+                                            size="sm"
+                                            fullWidth
+                                            icon="📋"
+                                        >
+                                            Copy
+                                        </Button>
+                                        <Button
+                                            onClick={handleShareRoom}
+                                            variant="primary"
+                                            size="sm"
+                                            fullWidth
+                                            icon="📤"
+                                        >
+                                            Share
+                                        </Button>
+                                    </div>
+
+                                    <motion.p
+                                        className="text-xs text-luxury-text mt-4"
+                                        animate={{ opacity: [0.5, 1, 0.5] }}
+                                        transition={{ duration: 2, repeat: Infinity }}
+                                    >
+                                        Waiting for friend to join...
+                                    </motion.p>
+
                                     <Button
-                                        onClick={handleShareRoom}
-                                        variant="outline"
+                                        onClick={handleCancelRoom}
+                                        variant="ghost"
                                         size="sm"
                                         className="mt-3"
-                                        icon="📤"
                                     >
-                                        Share Link
+                                        Cancel
                                     </Button>
-                                </div>
+                                </motion.div>
                             ) : (
                                 <Button
                                     onClick={() => setShowJoinModal(true)}
@@ -212,26 +285,28 @@ export default function Lobby() {
                     )}
 
                     {/* Play Button */}
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                    >
-                        <Button
-                            onClick={handlePlay}
-                            variant="primary"
-                            size="xl"
-                            fullWidth
-                            icon={mode === 'bot' ? '🤖' : mode === 'friend' ? '👥' : '🎮'}
+                    {!(mode === 'friend' && waitingForFriend) && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.2 }}
                         >
-                            {mode === 'bot'
-                                ? 'Challenge Bot'
-                                : mode === 'friend'
-                                    ? (createdRoomCode ? 'Waiting...' : 'Create Room')
-                                    : 'Find Match'
-                            }
-                        </Button>
-                    </motion.div>
+                            <Button
+                                onClick={handlePlay}
+                                variant="primary"
+                                size="xl"
+                                fullWidth
+                                icon={mode === 'bot' ? '🤖' : mode === 'friend' ? '🏠' : '🎮'}
+                            >
+                                {mode === 'bot'
+                                    ? 'Challenge Bot'
+                                    : mode === 'friend'
+                                        ? 'Create Room'
+                                        : 'Find Match'
+                                }
+                            </Button>
+                        </motion.div>
+                    )}
                 </div>
             </main>
 
@@ -251,18 +326,18 @@ export default function Lobby() {
                 <div className="space-y-4">
                     <input
                         type="text"
-                        value={roomCode}
-                        onChange={(e) => setRoomCode(e.target.value.toUpperCase().slice(0, 6))}
-                        placeholder="Enter room code"
+                        value={inputRoomCode}
+                        onChange={(e) => setInputRoomCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
+                        placeholder="XXXXXX"
                         maxLength={6}
-                        className="w-full px-4 py-3 rounded-xl bg-obsidian-800 border border-obsidian-700 text-white text-center text-2xl font-mono tracking-widest placeholder:text-obsidian-500 focus:outline-none focus:border-violet-500"
+                        className="w-full px-4 py-4 rounded-xl bg-luxury-dark border border-luxury-border text-luxury-white text-center text-3xl font-mono tracking-[0.3em] placeholder:text-luxury-muted placeholder:tracking-[0.3em] focus:outline-none focus:border-gold-500/50"
                     />
 
                     <Button
                         onClick={handleJoinRoom}
                         variant="primary"
                         fullWidth
-                        disabled={roomCode.length !== 6}
+                        disabled={inputRoomCode.length !== 6}
                     >
                         Join Game
                     </Button>

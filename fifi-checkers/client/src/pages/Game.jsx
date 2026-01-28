@@ -27,19 +27,21 @@ export default function Game() {
         timer,
         status,
         result,
+        isBot,
         reset
     } = useGameStore();
     const { resign, sendChat } = useSocket();
-    const { hapticFeedback, showConfirm } = useTelegram();
+    const { hapticFeedback } = useTelegram();
 
     const [showChat, setShowChat] = useState(false);
     const [showResignModal, setShowResignModal] = useState(false);
 
+    // Redirect if no match
     useEffect(() => {
-        if (status === 'idle' && !matchId) {
+        if (!matchId && status !== 'playing') {
             navigate('/');
         }
-    }, [status, matchId, navigate]);
+    }, [matchId, status, navigate]);
 
     // Count captured pieces
     const countCaptured = (color) => {
@@ -73,16 +75,22 @@ export default function Game() {
     };
 
     if (!matchId || !boardState) {
-        return null;
+        return (
+            <div className="flex items-center justify-center h-full bg-luxury-black">
+                <div className="text-luxury-text">Loading...</div>
+            </div>
+        );
     }
 
+    const isMyTurn = currentPlayer === myPlayerNum;
+
     return (
-        <div className="flex flex-col h-full bg-obsidian-950 safe-area-top safe-area-bottom">
+        <div className="flex flex-col h-full bg-luxury-black safe-area-top safe-area-bottom">
             {/* Opponent Card */}
-            <div className="px-4 pt-4">
+            <div className="px-3 pt-3">
                 <PlayerCard
                     player={myPlayerNum === 1 ? player2 : player1}
-                    timer={myPlayerNum === 1 ? timer.player2 : timer.player1}
+                    timer={myPlayerNum === 1 ? timer?.player2 || 180 : timer?.player1 || 180}
                     isActive={currentPlayer !== myPlayerNum}
                     isMe={false}
                     color={myPlayerNum === 1 ? 'black' : 'white'}
@@ -90,16 +98,28 @@ export default function Game() {
                 />
             </div>
 
+            {/* Turn Indicator */}
+            <div className="text-center py-2">
+                <motion.span
+                    key={isMyTurn ? 'your' : 'opponent'}
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`text-sm font-medium ${isMyTurn ? 'text-gold-400' : 'text-luxury-text'}`}
+                >
+                    {isMyTurn ? "Your turn" : "Opponent's turn"}
+                </motion.span>
+            </div>
+
             {/* Board */}
-            <div className="flex-1 flex items-center justify-center px-4 py-4">
+            <div className="flex-1 flex items-center justify-center px-3">
                 <Board />
             </div>
 
             {/* My Card */}
-            <div className="px-4 pb-2">
+            <div className="px-3 pt-2">
                 <PlayerCard
                     player={myPlayerNum === 1 ? player1 : player2}
-                    timer={myPlayerNum === 1 ? timer.player1 : timer.player2}
+                    timer={myPlayerNum === 1 ? timer?.player1 || 180 : timer?.player2 || 180}
                     isActive={currentPlayer === myPlayerNum}
                     isMe={true}
                     color={myPlayerNum === 1 ? 'white' : 'black'}
@@ -107,33 +127,38 @@ export default function Game() {
                 />
             </div>
 
-            {/* Quick Chat */}
-            <div className="px-4 pb-2">
-                <QuickChat onSend={handleQuickChat} />
-            </div>
+            {/* Quick Chat (only for non-bot games) */}
+            {!isBot && (
+                <div className="px-3 py-2">
+                    <QuickChat onSend={handleQuickChat} />
+                </div>
+            )}
 
             {/* Bottom Actions */}
-            <div className="flex items-center gap-3 px-4 pb-4">
-                <Button
-                    onClick={() => setShowChat(true)}
-                    variant="secondary"
-                    size="md"
-                    icon="💬"
-                >
-                    Chat
-                </Button>
+            <div className="flex items-center gap-3 px-3 pb-3">
+                {!isBot && (
+                    <Button
+                        onClick={() => setShowChat(true)}
+                        variant="secondary"
+                        size="sm"
+                        icon="💬"
+                    >
+                        Chat
+                    </Button>
+                )}
 
                 <div className="flex-1" />
 
                 <Button
                     onClick={() => setShowResignModal(true)}
                     variant="danger"
-                    size="md"
+                    size="sm"
                     icon="🏳️"
                 >
                     Resign
                 </Button>
             </div>
+
             {/* Chat Panel */}
             <AnimatePresence>
                 {showChat && (
@@ -141,15 +166,15 @@ export default function Game() {
                 )}
             </AnimatePresence>
 
-            {/* Resign Confirmation Modal */}
+            {/* Resign Modal */}
             <Modal
                 isOpen={showResignModal}
                 onClose={() => setShowResignModal(false)}
                 title="Resign Game?"
             >
                 <div className="space-y-4">
-                    <p className="text-obsidian-300 text-center">
-                        Are you sure you want to resign? This will count as a loss.
+                    <p className="text-luxury-light text-center text-sm">
+                        Are you sure? This will count as a loss.
                     </p>
 
                     <div className="flex gap-3">

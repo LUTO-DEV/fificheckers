@@ -13,25 +13,25 @@ export default function Modal({ isOpen, onClose, title, children, showClose = tr
                 onClick={onClose}
             >
                 {/* Backdrop */}
-                <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+                <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
 
                 {/* Modal */}
                 <motion.div
                     initial={{ scale: 0.9, opacity: 0, y: 20 }}
                     animate={{ scale: 1, opacity: 1, y: 0 }}
                     exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                    transition={{ type: 'spring', damping: 20 }}
+                    transition={{ type: 'spring', damping: 25 }}
                     onClick={(e) => e.stopPropagation()}
-                    className="relative w-full max-w-md glass rounded-2xl border border-obsidian-700 overflow-hidden"
+                    className="relative w-full max-w-md bg-luxury-dark rounded-2xl border border-luxury-border overflow-hidden shadow-2xl"
                 >
                     {/* Header */}
                     {title && (
-                        <div className="flex items-center justify-between px-5 py-4 border-b border-obsidian-700">
-                            <h3 className="text-lg font-display font-semibold text-white">{title}</h3>
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-luxury-border">
+                            <h3 className="text-lg font-display font-semibold text-luxury-white">{title}</h3>
                             {showClose && (
                                 <button
                                     onClick={onClose}
-                                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-obsidian-700 text-obsidian-400 hover:text-white transition-colors"
+                                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-luxury-card text-luxury-text hover:text-luxury-white transition-colors"
                                 >
                                     ✕
                                 </button>

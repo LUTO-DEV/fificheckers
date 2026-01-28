@@ -9,26 +9,29 @@ export default function Piece({ type, isSelected }) {
         <motion.div
             initial={{ scale: 0 }}
             animate={{
-                scale: isSelected ? 1.1 : 1,
-                y: isSelected ? -4 : 0
+                scale: isSelected ? 1.15 : 1,
+                y: isSelected ? -3 : 0
             }}
-            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             className={`
-        w-[85%] h-[85%] rounded-full cursor-pointer
+        w-[80%] h-[80%] rounded-full cursor-pointer
         ${isWhite ? 'piece-white' : 'piece-black'}
-        ${isSelected ? 'ring-2 ring-violet-500 ring-offset-2 ring-offset-transparent' : ''}
         flex items-center justify-center relative
         transition-shadow duration-200
+        ${isSelected ? 'ring-2 ring-gold-400 ring-offset-1 ring-offset-transparent' : ''}
       `}
         >
             {isKing && (
                 <motion.span
                     initial={{ scale: 0, rotate: -180 }}
                     animate={{ scale: 1, rotate: 0 }}
-                    className="absolute text-yellow-400 text-lg drop-shadow-lg"
-                    style={{ textShadow: '0 0 10px rgba(255, 215, 0, 0.8)' }}
+                    className="absolute text-gold-400 drop-shadow-lg piece-king"
+                    style={{
+                        fontSize: '1.2em',
+                        textShadow: '0 0 10px rgba(251, 191, 36, 0.8), 0 2px 4px rgba(0,0,0,0.5)'
+                    }}
                 >
-                    ♔
+                    ♛
                 </motion.span>
             )}
         </motion.div>
