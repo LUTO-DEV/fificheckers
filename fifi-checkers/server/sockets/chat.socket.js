@@ -1,32 +1,41 @@
 const MatchService = require('../services/match.service');
+const { sanitizeMessage } = require('../utils/validation.utils');
+const { QUICK_CHAT_MESSAGES, MAX_CHAT_LENGTH } = require('../utils/constants');
 
 module.exports = (io, socket) => {
-
+    // Send chat message
     socket.on('chat:send', (data) => {
         try {
             const { matchId, message, isQuickChat } = data;
 
-            if (!matchId || !message) {
-                console.log('❌ Chat: missing data');
-                return;
+            // Validate quick chat
+            if (isQuickChat && !QUICK_CHAT_MESSAGES.includes(message)) {
+                return socket.emit('chat:error', { error: 'Invalid quick chat message' });
             }
 
-            console.log('💬 Chat from', socket.telegramId, ':', message);
+            // Sanitize message
+            const sanitized = sanitizeMessage(message);
+            if (!sanitized) {
+                return socket.emit('chat:error', { error: 'Empty message' });
+            }
 
-            const chatMessage = MatchService.addChatMessage(matchId, socket.telegramId, message);
+            // Add message to match
+            const chatMessage = MatchService.addChatMessage(
+                matchId,
+                socket.telegramId,
+                sanitized
+            );
 
             if (chatMessage) {
-                // Broadcast to everyone in the match room
-                io.to(`match:${matchId}`).emit('chat:message', {
-                    ...chatMessage,
-                    isQuickChat: isQuickChat || false
-                });
-                console.log('💬 Chat broadcasted to match:', matchId.slice(0, 8));
+                io.to(`match:${matchId}`).emit('chat:message', chatMessage);
             }
-
         } catch (error) {
             console.error('Chat error:', error);
         }
     });
 
+    // Get quick chat options
+    socket.on('chat:quickOptions', () => {
+        socket.emit('chat:quickOptions', { messages: QUICK_CHAT_MESSAGES });
+    });
 };
