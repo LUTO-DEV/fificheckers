@@ -102,7 +102,7 @@ export default function Lobby() {
     const handleShareRoom = () => {
         if (!roomCode) return;
         hapticFeedback();
-        const url = `https://t.me/your_bot?start=room_${roomCode}`;
+        const url = `https://t.me/FIFI_CHECKERS_BOT?start=room_${roomCode}`;
         shareUrl(url, `Join my FiFi Checkers game! 🎮\nRoom Code: ${roomCode}`);
     };
 

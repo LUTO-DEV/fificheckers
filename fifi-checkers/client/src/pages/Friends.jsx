@@ -111,7 +111,7 @@ export default function Friends() {
     };
 
     const handleInvite = () => {
-        const url = 'https://t.me/your_bot';
+        const url = 'https://t.me/FIFI_CHECKERS_BOT';
         shareUrl(url, 'Join me on FiFi Checkers! 🎮♟️');
     };
 

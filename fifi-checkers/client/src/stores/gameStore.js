@@ -8,46 +8,40 @@ const useGameStore = create((set, get) => ({
     currentPlayer: 1,
     myPlayerNum: null,
     myColor: null,
-
-    // Players
     player1: null,
     player2: null,
-
-    // Game settings
     betAmount: 0,
     timerMode: 'BLITZ',
     isBot: false,
 
     // Timer
-    timer: {
-        player1: 180,
-        player2: 180,
-        activePlayer: 1
-    },
+    timer: { player1: 180, player2: 180, activePlayer: 1 },
 
-    // UI State
+    // Selection
     selectedPiece: null,
     validMoves: [],
     validCaptures: [],
     mustCapture: false,
     multiCaptureState: null,
 
-    // Game status
+    // Game state
     status: 'idle',
     result: null,
 
-    // Chat
+    // Chat with unread counter
     chatMessages: [],
+    unreadChatCount: 0,
 
-    // Queue
+    // Queue/Room
     queuePosition: null,
-
-    // Friend room
     roomCode: null,
 
-    // Actions
     setMatch: (match) => {
-        console.log('📦 Store: Setting match', match.matchId);
+        console.log('📦 setMatch called');
+        console.log('  matchId:', match.matchId);
+        console.log('  currentPlayer:', match.currentPlayer);
+        console.log('  turn:', match.turn);
+
         set({
             matchId: match.matchId,
             boardState: match.boardState,
@@ -65,28 +59,25 @@ const useGameStore = create((set, get) => ({
             validCaptures: [],
             multiCaptureState: null,
             chatMessages: [],
-            timer: match.timerState || {
-                player1: 180,
-                player2: 180,
-                activePlayer: 1
-            }
+            unreadChatCount: 0,
+            timer: match.timerState || { player1: 180, player2: 180, activePlayer: 1 }
         });
     },
 
     setMyPlayer: (telegramId) => {
         const state = get();
-        const playerNum = state.player1?.telegramId === telegramId ? 1 : 2;
-        const color = playerNum === 1 ? 'white' : 'black';
-        console.log(`📦 Store: My player = ${playerNum} (${color})`);
-        set({ myPlayerNum: playerNum, myColor: color });
+        const num = state.player1?.telegramId === telegramId ? 1 : 2;
+        const color = num === 1 ? 'white' : 'black';
+        console.log('📦 setMyPlayer: num=', num, 'color=', color);
+        set({ myPlayerNum: num, myColor: color });
     },
 
     updateBoard: (boardState, turn, currentPlayer) => {
-        console.log(`📦 Store: Board update - turn=${turn}, player=${currentPlayer}`);
+        console.log('📦 updateBoard: currentPlayer=', currentPlayer, 'turn=', turn);
         set({
             boardState,
-            turn,
-            currentPlayer,
+            turn: turn || (currentPlayer === 1 ? 'white' : 'black'),
+            currentPlayer: currentPlayer,
             selectedPiece: null,
             validMoves: [],
             validCaptures: []
@@ -98,7 +89,7 @@ const useGameStore = create((set, get) => ({
     },
 
     selectPiece: (row, col, moves, captures, mustCapture) => {
-        console.log(`📦 Store: Selected piece at (${row}, ${col})`);
+        console.log('📦 selectPiece:', row, col, 'moves:', moves?.length, 'captures:', captures?.length);
         set({
             selectedPiece: { row, col },
             validMoves: moves || [],
@@ -117,62 +108,58 @@ const useGameStore = create((set, get) => ({
     },
 
     setMultiCapture: (state) => {
-        console.log('📦 Store: Multi-capture state:', state);
+        console.log('📦 setMultiCapture:', state);
         set({ multiCaptureState: state });
     },
 
     setResult: (result) => {
-        console.log('📦 Store: Game result', result);
+        console.log('📦 setResult:', result?.reason);
+        set({ status: 'finished', result });
+    },
+
+    addChatMessage: (msg) => {
+        const state = get();
         set({
-            status: 'finished',
-            result
+            chatMessages: [...state.chatMessages, msg].slice(-50),
+            unreadChatCount: state.unreadChatCount + 1
         });
     },
 
-    addChatMessage: (message) => set((state) => ({
-        chatMessages: [...state.chatMessages, message].slice(-50)
-    })),
-
-    setQueuePosition: (position) => set({ queuePosition: position }),
-
-    setRoomCode: (code) => {
-        console.log('📦 Store: Room code:', code);
-        set({ roomCode: code });
+    clearUnreadChat: () => {
+        set({ unreadChatCount: 0 });
     },
 
+    setQueuePosition: (pos) => set({ queuePosition: pos }),
+    setRoomCode: (code) => set({ roomCode: code }),
     setStatus: (status) => set({ status }),
-
     setBetAmount: (amount) => set({ betAmount: amount }),
-
     setTimerMode: (mode) => set({ timerMode: mode }),
 
-    reset: () => {
-        console.log('📦 Store: Resetting');
-        set({
-            matchId: null,
-            boardState: null,
-            turn: 'white',
-            currentPlayer: 1,
-            myPlayerNum: null,
-            myColor: null,
-            player1: null,
-            player2: null,
-            betAmount: 0,
-            timerMode: 'BLITZ',
-            isBot: false,
-            timer: { player1: 180, player2: 180, activePlayer: 1 },
-            selectedPiece: null,
-            validMoves: [],
-            validCaptures: [],
-            mustCapture: false,
-            multiCaptureState: null,
-            status: 'idle',
-            result: null,
-            chatMessages: [],
-            queuePosition: null,
-            roomCode: null
-        });
-    }
+    reset: () => set({
+        matchId: null,
+        boardState: null,
+        turn: 'white',
+        currentPlayer: 1,
+        myPlayerNum: null,
+        myColor: null,
+        player1: null,
+        player2: null,
+        betAmount: 0,
+        timerMode: 'BLITZ',
+        isBot: false,
+        timer: { player1: 180, player2: 180, activePlayer: 1 },
+        selectedPiece: null,
+        validMoves: [],
+        validCaptures: [],
+        mustCapture: false,
+        multiCaptureState: null,
+        status: 'idle',
+        result: null,
+        chatMessages: [],
+        unreadChatCount: 0,
+        queuePosition: null,
+        roomCode: null
+    })
 }));
 
 export default useGameStore;
