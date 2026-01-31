@@ -1,4 +1,6 @@
-export const PIECE = {
+const BOARD_SIZE = 8;
+
+const PIECE = {
     EMPTY: 0,
     WHITE: 1,
     BLACK: 2,
@@ -6,16 +8,28 @@ export const PIECE = {
     BLACK_KING: 4
 };
 
-export const TIMER_MODES = {
-    BLITZ: { label: 'Blitz', time: 180, icon: '⚡' },
-    RAPID: { label: 'Rapid', time: 300, icon: '🕐' },
-    CLASSIC: { label: 'Classic', time: 600, icon: '♟️' }
+const MATCH_STATUS = {
+    WAITING: 'waiting',
+    ACTIVE: 'active',
+    FINISHED: 'finished',
+    CANCELLED: 'cancelled'
 };
 
-export const BET_OPTIONS = [0, 10, 25, 50, 100, 250, 500];
+const TIMER_MODES = {
+    BLITZ: 180,
+    RAPID: 300,
+    CLASSIC: 600
+};
 
-// Quick chat - must match server QUICK_CHAT_MESSAGES exactly!
-export const QUICK_CHAT = [
+const RANKS = {
+    WOOD: { name: 'Wood', minWins: 0, icon: '🪵', color: '#8B4513' },
+    BRONZE: { name: 'Bronze', minWins: 20, icon: '🥉', color: '#CD7F32' },
+    SILVER: { name: 'Silver', minWins: 50, icon: '🥈', color: '#C0C0C0' },
+    GOLD: { name: 'Gold', minWins: 100, icon: '🥇', color: '#FFD700' },
+    DIAMOND: { name: 'Diamond', minWins: 500, icon: '💎', color: '#B9F2FF' }
+};
+
+const QUICK_CHAT_MESSAGES = [
     'Hello!',
     'Good game!',
     'Nice move!',
@@ -30,10 +44,14 @@ export const QUICK_CHAT = [
     'GG'
 ];
 
-export const RANKS = {
-    WOOD: { name: 'Wood', icon: '🪵', color: '#8B4513' },
-    BRONZE: { name: 'Bronze', icon: '🥉', color: '#CD7F32' },
-    SILVER: { name: 'Silver', icon: '🥈', color: '#C0C0C0' },
-    GOLD: { name: 'Gold', icon: '🥇', color: '#FFD700' },
-    DIAMOND: { name: 'Diamond', icon: '💎', color: '#B9F2FF' }
+const MAX_CHAT_LENGTH = 120;
+
+module.exports = {
+    BOARD_SIZE,
+    PIECE,
+    MATCH_STATUS,
+    TIMER_MODES,
+    RANKS,
+    QUICK_CHAT_MESSAGES,
+    MAX_CHAT_LENGTH
 };
