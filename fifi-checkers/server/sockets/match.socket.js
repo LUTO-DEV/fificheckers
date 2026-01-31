@@ -14,6 +14,13 @@ module.exports = (io, socket) => {
             console.log('Move:', JSON.stringify(move));
             console.log('===============================');
 
+            // Ensure socket is in the room
+            const roomName = `match:${matchId}`;
+            if (!socket.rooms.has(roomName)) {
+                socket.join(roomName);
+                console.log('📍 Joined room:', roomName);
+            }
+
             const result = MatchService.validateAndExecuteMove(matchId, socket.telegramId, move);
 
             if (!result.success) {
@@ -22,12 +29,7 @@ module.exports = (io, socket) => {
                 return;
             }
 
-            if (result.winner) {
-                console.log('📡 Emitting match:end');
-                io.to(`match:${matchId}`).emit('match:end', result);
-                return;
-            }
-
+            // Build move data
             const moveData = {
                 board: result.board,
                 move: move,
@@ -39,9 +41,36 @@ module.exports = (io, socket) => {
                 timerState: result.timerState
             };
 
+            // ALWAYS send the move result first
             console.log('📡 Emitting move:result | Next:', result.nextPlayer);
-            io.to(`match:${matchId}`).emit('move:result', moveData);
+            io.to(roomName).emit('move:result', moveData);
 
+            // Check if game ended with this move
+            if (result.gameEnded) {
+                console.log('🏁 Game ended with this move, sending match:end after delay...');
+
+                // Delay to let client render the final move
+                setTimeout(async () => {
+                    const endResult = await MatchService.endMatch(matchId, result.winnerNum, result.endReason);
+                    if (endResult) {
+                        console.log('📡 Emitting match:end');
+                        io.to(roomName).emit('match:end', endResult);
+                    }
+                }, 500); // 500ms delay for final move to render
+
+                return;
+            }
+
+            // Legacy support: if result already has winner (from old code path)
+            if (result.winner) {
+                console.log('📡 Emitting match:end (legacy)');
+                setTimeout(() => {
+                    io.to(roomName).emit('match:end', result);
+                }, 500);
+                return;
+            }
+
+            // Bot turn
             const match = MatchService.getMatch(matchId);
 
             if (match && match.player2.isBot && result.turnEnded && match.currentPlayer === 2) {
@@ -56,23 +85,27 @@ module.exports = (io, socket) => {
                             return;
                         }
 
-                        if (botResult.winner) {
-                            console.log('📡 Bot won - emitting match:end');
-                            io.to(`match:${matchId}`).emit('match:end', botResult);
-                        } else {
-                            const botData = {
-                                board: botResult.board,
-                                move: botResult.move,
-                                isBot: true,
-                                isCapture: botResult.isCapture || false,
-                                multiCapture: false,
-                                turnEnded: true,
-                                nextPlayer: 1,
-                                timerState: botResult.timerState
-                            };
+                        // Send bot's move first
+                        const botData = {
+                            board: botResult.board,
+                            move: botResult.move,
+                            isBot: true,
+                            isCapture: botResult.isCapture || false,
+                            multiCapture: false,
+                            turnEnded: true,
+                            nextPlayer: 1,
+                            timerState: botResult.timerState
+                        };
 
-                            console.log('📡 Emitting bot move:result');
-                            io.to(`match:${matchId}`).emit('move:result', botData);
+                        console.log('📡 Emitting bot move:result');
+                        io.to(roomName).emit('move:result', botData);
+
+                        // If bot won, send match:end after delay
+                        if (botResult.winner) {
+                            setTimeout(() => {
+                                console.log('📡 Bot won - emitting match:end');
+                                io.to(roomName).emit('match:end', botResult);
+                            }, 500);
                         }
                     } catch (err) {
                         console.error('❌ Bot error:', err);

@@ -107,7 +107,18 @@ class MatchService {
             return { success: false, error: 'Match not found' };
         }
 
+        // Allow the final winning move even if status just changed
         if (match.status !== MATCH_STATUS.ACTIVE) {
+            // If match just finished, return success with current board
+            if (match.status === MATCH_STATUS.FINISHED) {
+                console.log('⚠️ Match already finished');
+                return {
+                    success: true,
+                    board: match.boardState,
+                    turnEnded: true,
+                    gameEnded: true
+                };
+            }
             console.log('❌ Match not active:', match.status);
             return { success: false, error: 'Match is not active' };
         }
@@ -160,7 +171,7 @@ class MatchService {
             timestamp: Date.now()
         });
 
-        // Check for multi-capture
+        // Check for multi-capture FIRST
         if (validation.isCapture) {
             const furtherCaptures = CheckersLogic.getMultiCaptures(newBoard, move.to.row, move.to.col);
             console.log('Further captures available:', furtherCaptures.length);
@@ -186,11 +197,26 @@ class MatchService {
         // Clear multi-capture state
         match.multiCaptureState = null;
 
-        // Check game end
+        // Check game end AFTER move is complete
         const gameEnd = CheckersLogic.checkGameEnd(newBoard, playerColor);
+
         if (gameEnd.ended) {
-            console.log('🏁 Game ended! Winner:', gameEnd.winner);
-            return this.endMatch(matchId, playerNum, gameEnd.reason);
+            console.log('🏁 Game ended! Winner:', gameEnd.winner, 'Reason:', gameEnd.reason);
+
+            // DON'T call endMatch here - return the move result with gameEnded flag
+            // The socket handler will send the move first, then end the match
+            return {
+                success: true,
+                board: newBoard,
+                isCapture: validation.isCapture,
+                multiCapture: false,
+                turnEnded: true,
+                nextPlayer: playerNum === 1 ? 2 : 1,
+                timerState: TimerService.getTimerState(matchId),
+                gameEnded: true,
+                winnerNum: playerNum,
+                endReason: gameEnd.reason
+            };
         }
 
         // Switch turn
@@ -213,7 +239,6 @@ class MatchService {
             timerState
         };
     }
-
     async executeBotMove(matchId) {
         const match = this.activeMatches.get(matchId);
 
