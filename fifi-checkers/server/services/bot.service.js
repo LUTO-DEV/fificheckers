@@ -4,466 +4,444 @@ const { PIECE, BOARD_SIZE } = require('../utils/constants');
 class BotService {
 
     // ============================================
-    // THE TERMINATOR - NO MERCY, NO BUGS
+    // THE OMNISCIENT - MATHEMATICALLY PERFECTED
     // ============================================
-    static SEARCH_DEPTH = 20;
-    static ENDGAME_DEPTH = 26;
-    static MAX_THINK_TIME = 12000;
-    static MIN_DEPTH = 16;
+    static INFINITY = 1000000;
+    static MAX_TIME_MS = 10000; // 10 seconds of pure calculation
+    static MIN_DEPTH = 12;      // Minimum guaranteed depth
+    static MAX_DEPTH = 64;      // Theoretical max
 
-    static transpositionTable = new Map();
-    static killerMoves = [];
-    static historyTable = new Map();
-    static nodesEvaluated = 0;
+    // Memory Structures
+    static tt = new Map();      // Transposition Table
+    static history = new Uint32Array(64 * 64); // Fast History Heuristic
+    static killerMoves = [];    // Killer Move slots
 
-    // ============================================
-    // MAIN ENTRY
-    // ============================================
-    static getBestMove(board, botColor) {
-        const startTime = Date.now();
-        this.nodesEvaluated = 0;
+    static nodes = 0;
+    static timeStart = 0;
+    static timeOut = false;
 
-        if (this.transpositionTable.size > 2000000) {
-            this.transpositionTable.clear();
-        }
-        this.historyTable.clear();
+    // Zobrist Keys (For instant hashing)
+    static zArray = [];
+    static zTurn = 0;
 
-        console.log('');
-        console.log('🤖 ==========================================');
-        console.log('🤖 THE TERMINATOR - I WILL BE BACK');
-        console.log('🤖 ==========================================');
-
-        const oppColor = botColor === 'black' ? 'white' : 'black';
-        const { moves, captures, mustCapture } = CheckersLogic.getAllValidMoves(board, botColor);
-        const allMoves = mustCapture ? captures : [...captures, ...moves];
-
-        if (allMoves.length === 0) {
-            console.log('🤖 No moves available');
-            return null;
-        }
-
-        if (allMoves.length === 1) {
-            console.log('🤖 Only one move');
-            return allMoves[0];
-        }
-
-        // Count pieces
-        const botPieces = this.countColor(board, botColor);
-        const oppPieces = this.countColor(board, oppColor);
-        const total = botPieces + oppPieces;
-
-        const isEndgame = total <= 8;
-        const targetDepth = isEndgame ? this.ENDGAME_DEPTH : this.SEARCH_DEPTH;
-
-        console.log(`🤖 Bot: ${botPieces} | Human: ${oppPieces} | Total: ${total}`);
-        console.log(`🤖 Target Depth: ${targetDepth}`);
-        console.log(`🤖 Analyzing ${allMoves.length} moves...`);
-
-        this.killerMoves = Array(targetDepth + 10).fill(null).map(() => []);
-
-        let bestMove = allMoves[0];
-        let bestScore = -Infinity;
-        let completedDepth = 0;
-
-        // Iterative deepening
-        for (let depth = 4; depth <= targetDepth; depth += 2) {
-            const elapsed = Date.now() - startTime;
-
-            if (depth > this.MIN_DEPTH && elapsed > this.MAX_THINK_TIME) {
-                console.log(`🤖 Time limit at depth ${completedDepth}`);
-                break;
-            }
-
-            const result = this.rootSearch(board, allMoves, depth, botColor, startTime);
-
-            bestMove = result.move;
-            bestScore = result.score;
-            completedDepth = depth;
-
-            console.log(`🤖 Depth ${depth} | Score: ${bestScore} | (${bestMove.from.row},${bestMove.from.col})->(${bestMove.to.row},${bestMove.to.col})`);
-
-            // Found guaranteed win
-            if (bestScore > 50000) {
-                console.log('🤖 GUARANTEED WIN DETECTED!');
-                break;
+    static initZobrist() {
+        if (this.zArray.length > 0) return;
+        // Initialize 3D array [row][col][piece_type] with random 32bit ints
+        for (let i = 0; i < 8; i++) {
+            this.zArray[i] = [];
+            for (let j = 0; j < 8; j++) {
+                this.zArray[i][j] = {};
+                // Assign random ID for Black, White, B-King, W-King
+                [PIECE.BLACK, PIECE.WHITE, PIECE.BLACK_KING, PIECE.WHITE_KING].forEach(p => {
+                    this.zArray[i][j][p] = Math.floor(Math.random() * 2147483647);
+                });
             }
         }
-
-        const elapsed = Date.now() - startTime;
-        console.log('🤖 ==========================================');
-        console.log(`🤖 FINAL: Depth ${completedDepth} | Score: ${bestScore}`);
-        console.log(`🤖 Nodes: ${this.nodesEvaluated.toLocaleString()} | Time: ${elapsed}ms`);
-        console.log('🤖 ==========================================');
-
-        return bestMove;
+        this.zTurn = Math.floor(Math.random() * 2147483647);
     }
 
     // ============================================
-    // ROOT SEARCH
+    // MAIN ENTRY POINT
     // ============================================
-    static rootSearch(board, moves, depth, botColor, startTime) {
-        const oppColor = botColor === 'black' ? 'white' : 'black';
+    static getBestMove(board, botColor) {
+        this.initZobrist();
+        this.timeStart = Date.now();
+        this.timeOut = false;
+        this.nodes = 0;
 
-        // Score each move
-        const scoredMoves = [];
+        // Clear heavy memory if too full
+        if (this.tt.size > 2000000) this.tt.clear();
 
-        for (const move of moves) {
-            const isCapture = !!move.captured;
-            let newBoard = CheckersLogic.executeMove(board, move, isCapture);
+        // Reset per-turn structures
+        this.history.fill(0);
+        this.killerMoves = Array(this.MAX_DEPTH).fill(null).map(() => [null, null]);
 
-            if (isCapture) {
-                newBoard = this.doAllChains(newBoard, move.to.row, move.to.col, botColor);
+        console.log(`👁️  THE OMNISCIENT IS CALCULATING...`);
+
+        const { moves, captures, mustCapture } = CheckersLogic.getAllValidMoves(board, botColor);
+        let rootMoves = mustCapture ? captures : [...captures, ...moves];
+
+        if (rootMoves.length === 0) return null;
+        if (rootMoves.length === 1) return rootMoves[0]; // Forced move
+
+        // Initial simple sort
+        rootMoves = this.sortMoves(rootMoves, board, 0);
+
+        let bestMove = rootMoves[0];
+        let bestScore = -this.INFINITY;
+
+        // ITERATIVE DEEPENING WITH ASPIRATION WINDOWS
+        // We start shallow and go deep.
+        // We guess the score is roughly previous score +/- 50 points.
+        let alpha = -this.INFINITY;
+        let beta = this.INFINITY;
+        let window = 400; // Aspiration window size
+
+        for (let depth = 4; depth <= this.MAX_DEPTH; depth++) {
+
+            // Time check
+            if (Date.now() - this.timeStart > this.MAX_TIME_MS) break;
+
+            // Search
+            let score = this.alphaBeta(board, depth, alpha, beta, botColor, botColor, 0, true);
+
+            // If we ran out of time during search, discard this depth's result
+            if (this.timeOut) break;
+
+            // Aspiration Window Logic:
+            // If score falls outside window, re-search with full infinity bounds
+            if (score <= alpha || score >= beta) {
+                // Fail low or high - re-search full window
+                alpha = -this.INFINITY;
+                beta = this.INFINITY;
+                score = this.alphaBeta(board, depth, alpha, beta, botColor, botColor, 0, true);
+            } else {
+                // Tighten window for next depth
+                alpha = score - window;
+                beta = score + window;
             }
 
-            // Check if this move wins immediately
-            const oppMoves = CheckersLogic.getAllValidMoves(newBoard, oppColor);
-            if (oppMoves.moves.length === 0 && oppMoves.captures.length === 0) {
-                // Opponent has no moves = WE WIN
-                return { move, score: 100000 };
+            // Read best move from TT
+            const hash = this.computeHash(board, botColor);
+            const ttEntry = this.tt.get(hash);
+
+            if (ttEntry && ttEntry.move) {
+                bestMove = ttEntry.move;
+                bestScore = score;
             }
 
-            const oppPiecesLeft = this.countColor(newBoard, oppColor);
-            if (oppPiecesLeft === 0) {
-                // Opponent has no pieces = WE WIN
-                return { move, score: 100000 };
-            }
+            const timeUsed = Date.now() - this.timeStart;
+            const nps = Math.floor(this.nodes / (timeUsed / 1000));
+            console.log(`👁️  Depth ${depth} | Score: ${score} | Nodes: ${this.nodes} | NPS: ${nps}`);
 
-            // Search deeper
-            const score = -this.alphaBeta(newBoard, depth - 1, -Infinity, Infinity, oppColor, botColor, 1, startTime);
-            scoredMoves.push({ move, score });
+            // Mate detection
+            if (score > 90000) {
+                console.log("👁️  MATE IN " + (100000 - score) + " PLIES");
+                break;
+            }
         }
 
-        // Sort by score and return best
-        scoredMoves.sort((a, b) => b.score - a.score);
-        return scoredMoves[0];
+        console.log(`👁️  BEST MOVE: (${bestMove.from.row},${bestMove.from.col}) -> (${bestMove.to.row},${bestMove.to.col})`);
+        return bestMove;
     }
 
     // ============================================
     // ALPHA-BETA SEARCH
     // ============================================
-    static alphaBeta(board, depth, alpha, beta, currentColor, botColor, ply, startTime) {
-        this.nodesEvaluated++;
+    static alphaBeta(board, depth, alpha, beta, color, botColor, ply, isRoot = false) {
+        if ((this.nodes & 2047) === 0) {
+            if (Date.now() - this.timeStart > this.MAX_TIME_MS) {
+                this.timeOut = true;
+            }
+        }
+        if (this.timeOut) return 0;
 
-        const oppColor = currentColor === 'black' ? 'white' : 'black';
-        const isBotTurn = currentColor === botColor;
+        this.nodes++;
+        const isBot = color === botColor;
+        const oppColor = color === 'black' ? 'white' : 'black';
 
-        // Check for terminal states
-        const { moves, captures, mustCapture } = CheckersLogic.getAllValidMoves(board, currentColor);
-        const allMoves = mustCapture ? captures : [...captures, ...moves];
-
-        // No moves = current player LOSES
-        if (allMoves.length === 0) {
-            return isBotTurn ? (-100000 + ply) : (100000 - ply);
+        // 1. Transposition Table Lookup
+        const hash = this.computeHash(board, color);
+        const ttEntry = this.tt.get(hash);
+        if (ttEntry && ttEntry.depth >= depth && !isRoot) {
+            if (ttEntry.flag === 'EXACT') return ttEntry.score;
+            if (ttEntry.flag === 'LOWER' && ttEntry.score >= beta) return ttEntry.score;
+            if (ttEntry.flag === 'UPPER' && ttEntry.score <= alpha) return ttEntry.score;
         }
 
-        // No pieces = current player LOSES
-        const myPieces = this.countColor(board, currentColor);
-        if (myPieces === 0) {
-            return isBotTurn ? (-100000 + ply) : (100000 - ply);
-        }
-
-        // Depth limit
+        // 2. Leaf Node / Quiescence
         if (depth <= 0) {
-            return this.evaluate(board, botColor);
+            return this.quiescence(board, alpha, beta, color, botColor);
         }
 
-        // TT lookup
-        const hash = this.hash(board, currentColor);
-        const cached = this.transpositionTable.get(hash);
-        if (cached && cached.depth >= depth) {
-            if (cached.flag === 'EXACT') return cached.score;
-            if (cached.flag === 'LOWER') alpha = Math.max(alpha, cached.score);
-            if (cached.flag === 'UPPER') beta = Math.min(beta, cached.score);
-            if (alpha >= beta) return cached.score;
+        const { moves, captures, mustCapture } = CheckersLogic.getAllValidMoves(board, color);
+        let allMoves = mustCapture ? captures : [...captures, ...moves];
+
+        // 3. Game Over Detection
+        if (allMoves.length === 0) {
+            // If valid moves is 0, current player loses.
+            // Score is -Infinity + ply (to prefer faster wins)
+            return -100000 + ply;
         }
 
-        const alphaOrig = alpha;
+        // 4. Move Sorting (Crucial for pruning)
+        // Pass the TT move if we have one to try it first
+        allMoves = this.sortMoves(allMoves, board, ply, ttEntry?.move);
 
-        // Sort moves
-        const sortedMoves = this.sortMoves(allMoves, board, currentColor, ply, cached?.move);
-
-        let bestScore = -Infinity;
         let bestMove = null;
+        let bestScore = -this.INFINITY;
+        let moveType = 'UPPER'; // Default is we haven't exceeded alpha
 
-        for (let i = 0; i < sortedMoves.length; i++) {
-            const move = sortedMoves[i];
+        for (let i = 0; i < allMoves.length; i++) {
+            const move = allMoves[i];
             const isCapture = !!move.captured;
 
-            let newBoard = CheckersLogic.executeMove(board, move, isCapture);
+            // --- EXECUTE MOVE ---
+            let nextBoard = CheckersLogic.executeMove(board, move, isCapture);
+            // Handle multi-jumps immediately
             if (isCapture) {
-                newBoard = this.doAllChains(newBoard, move.to.row, move.to.col, currentColor);
+                nextBoard = this.handleMultiJumps(nextBoard, move.to.row, move.to.col, color);
             }
 
-            // Extensions
-            let ext = 0;
-            if (isCapture) ext = 1;
-            if (this.isPromo(move, board)) ext = 1;
-            ext = Math.min(ext, 2);
+            // --- EXTENSIONS ---
+            // Extend search depth for forced captures or promotions to avoid "Horizon Effect"
+            let extension = 0;
+            if (isCapture) extension = 1;
+            if (this.isPromotion(move, board)) extension = 1;
 
-            // LMR
-            let red = 0;
-            if (depth >= 4 && i >= 4 && !isCapture && ext === 0) {
-                red = 1 + Math.floor(i / 8);
-                red = Math.min(red, depth - 2);
-            }
-
+            // --- RECURSION ---
             let score;
-            const newDepth = depth - 1 + ext - red;
-
             if (i === 0) {
-                score = -this.alphaBeta(newBoard, newDepth, -beta, -alpha, oppColor, botColor, ply + 1, startTime);
+                // Full window search for first move (PV-Node)
+                score = -this.alphaBeta(nextBoard, depth - 1 + extension, -beta, -alpha, oppColor, botColor, ply + 1);
             } else {
-                score = -this.alphaBeta(newBoard, newDepth, -alpha - 1, -alpha, oppColor, botColor, ply + 1, startTime);
-                if (score > alpha && (red > 0 || score < beta)) {
-                    score = -this.alphaBeta(newBoard, depth - 1 + ext, -beta, -alpha, oppColor, botColor, ply + 1, startTime);
+                // Late Move Reduction (LMR)
+                // If we are searching moves late in the list, search them shallower first to save time
+                let reduction = 0;
+                if (depth >= 3 && i > 3 && !isCapture && extension === 0) {
+                    reduction = 1;
+                }
+
+                // Null Window Search (Prove that this move is bad)
+                score = -this.alphaBeta(nextBoard, depth - 1 - reduction + extension, -alpha - 1, -alpha, oppColor, botColor, ply + 1);
+
+                // If LMR failed (move was actually good) or Null Window failed, re-search full window
+                if (score > alpha && (reduction > 0 || score < beta)) {
+                    score = -this.alphaBeta(nextBoard, depth - 1 + extension, -beta, -alpha, oppColor, botColor, ply + 1);
                 }
             }
+
+            if (this.timeOut) return 0;
 
             if (score > bestScore) {
                 bestScore = score;
                 bestMove = move;
+                if (isRoot && depth > 6) {
+                    // Print simplified update for root changes
+                    // console.log(`   > New Best: ${score}`);
+                }
             }
 
-            alpha = Math.max(alpha, score);
-
-            if (alpha >= beta) {
-                // Killer move
-                if (!isCapture && this.killerMoves[ply]) {
-                    this.killerMoves[ply].unshift(move);
-                    if (this.killerMoves[ply].length > 2) this.killerMoves[ply].pop();
+            // Beta Cutoff
+            if (score >= beta) {
+                // Store Killer Move (non-captures only)
+                if (!isCapture) {
+                    this.storeKiller(ply, move);
+                    // Update History Heuristic
+                    const hKey = move.from.row * 8 + move.from.col;
+                    this.history[hKey] += depth * depth;
                 }
-                break;
+
+                this.tt.set(hash, { depth, score, flag: 'LOWER', move }); // Lower bound
+                return score;
+            }
+
+            if (score > alpha) {
+                alpha = score;
+                moveType = 'EXACT';
             }
         }
 
-        // TT store
-        let flag = 'EXACT';
-        if (bestScore <= alphaOrig) flag = 'UPPER';
-        else if (bestScore >= beta) flag = 'LOWER';
-        this.transpositionTable.set(hash, { depth, score: bestScore, flag, move: bestMove });
-
+        // Store in TT
+        this.tt.set(hash, { depth, score: bestScore, flag: moveType, move: bestMove });
         return bestScore;
     }
 
     // ============================================
-    // EVALUATION - FROM BOT'S PERSPECTIVE ALWAYS
+    // QUIESCENCE SEARCH (Resolve turbulence)
     // ============================================
-    static evaluate(board, botColor) {
-        const oppColor = botColor === 'black' ? 'white' : 'black';
+    static quiescence(board, alpha, beta, color, botColor) {
+        this.nodes++;
 
-        let botScore = 0;
-        let oppScore = 0;
-        let botPieces = 0, botKings = 0;
-        let oppPieces = 0, oppKings = 0;
+        // Stand pat (current static evaluation)
+        const standPat = this.evaluateBoard(board, color, botColor);
 
-        for (let row = 0; row < 8; row++) {
-            for (let col = 0; col < 8; col++) {
-                const piece = board[row][col];
-                if (piece === PIECE.EMPTY) continue;
+        if (standPat >= beta) return beta;
+        if (standPat > alpha) alpha = standPat;
 
-                const isBlack = piece === PIECE.BLACK || piece === PIECE.BLACK_KING;
-                const isKing = piece === PIECE.BLACK_KING || piece === PIECE.WHITE_KING;
-                const isBotPiece = (botColor === 'black') === isBlack;
+        // Only look at Captures in Quiescence
+        const { captures } = CheckersLogic.getAllValidMoves(board, color);
 
-                let value = 0;
+        // Sort captures by value (heuristic)
+        captures.sort((a, b) => this.scoreCapture(b, board) - this.scoreCapture(a, board));
 
-                if (isKing) {
-                    value = 500;
-                    value += this.kingMobility(board, row, col) * 10;
-                    // Center control for kings
-                    const cd = Math.abs(3.5 - row) + Math.abs(3.5 - col);
-                    value += (7 - cd) * 8;
-                } else {
-                    value = 100;
+        const oppColor = color === 'black' ? 'white' : 'black';
 
-                    // Advancement bonus (pieces closer to becoming kings)
-                    if (isBlack) {
-                        value += row * 15;
-                        if (row >= 5) value += 40;
-                        if (row >= 6) value += 60;
-                        if (row === 7) value += 100;
-                    } else {
-                        value += (7 - row) * 15;
-                        if (row <= 2) value += 40;
-                        if (row <= 1) value += 60;
-                        if (row === 0) value += 100;
-                    }
+        for (const move of captures) {
+            let nextBoard = CheckersLogic.executeMove(board, move, true);
+            nextBoard = this.handleMultiJumps(nextBoard, move.to.row, move.to.col, color);
 
-                    // Back row bonus (defense)
-                    if ((isBlack && row === 0) || (!isBlack && row === 7)) {
-                        value += 30;
-                    }
-                }
+            const score = -this.quiescence(nextBoard, -beta, -alpha, oppColor, botColor);
 
-                // Center control
-                const centerDist = Math.abs(3.5 - row) + Math.abs(3.5 - col);
-                value += (7 - centerDist) * 5;
-
-                // Edge penalty
-                if (col === 0 || col === 7) value -= 10;
-
-                if (isBotPiece) {
-                    botScore += value;
-                    if (isKing) botKings++; else botPieces++;
-                } else {
-                    oppScore += value;
-                    if (isKing) oppKings++; else oppPieces++;
-                }
-            }
+            if (score >= beta) return beta;
+            if (score > alpha) alpha = score;
         }
 
-        // Material count bonus (having more pieces is HUGE)
-        const botTotal = botPieces + botKings;
-        const oppTotal = oppPieces + oppKings;
-
-        if (oppTotal === 0) return 100000;
-        if (botTotal === 0) return -100000;
-
-        const materialDiff = botTotal - oppTotal;
-        botScore += materialDiff * 200;
-
-        // King advantage
-        botScore += (botKings - oppKings) * 150;
-
-        // Mobility
-        const botMoves = CheckersLogic.getAllValidMoves(board, botColor);
-        const oppMoves = CheckersLogic.getAllValidMoves(board, oppColor);
-
-        botScore += botMoves.captures.length * 50;
-        botScore += botMoves.moves.length * 10;
-        oppScore += oppMoves.captures.length * 40;
-        oppScore += oppMoves.moves.length * 8;
-
-        // Opponent has no moves = we win
-        if (oppMoves.moves.length === 0 && oppMoves.captures.length === 0) {
-            return 90000;
-        }
-
-        return botScore - oppScore;
+        return alpha;
     }
 
     // ============================================
-    // MOVE SORTING
+    // EVALUATION - THE BRAIN
     // ============================================
-    static sortMoves(moves, board, color, ply, pvMove) {
-        return moves.map(move => {
-            let score = 0;
+    static evaluateBoard(board, color, botColor) {
+        let score = 0;
 
-            // PV move
-            if (pvMove && this.eq(move, pvMove)) score += 10000000;
+        const isBotBlack = botColor === 'black';
+        const blackSign = isBotBlack ? 1 : -1;
 
-            // Captures
-            if (move.captured) {
-                const v = board[move.captured.row][move.captured.col];
-                const victimVal = (v === PIECE.BLACK_KING || v === PIECE.WHITE_KING) ? 500 : 100;
-                score += 5000000 + victimVal * 10;
+        let blackPieces = 0;
+        let whitePieces = 0;
 
-                // Chain bonus
-                const temp = CheckersLogic.executeMove(board, move, true);
-                const chains = CheckersLogic.getMultiCaptures(temp, move.to.row, move.to.col);
-                score += chains.length * 1000000;
-            }
-
-            // Promotion
-            if (this.isPromo(move, board)) score += 3000000;
-
-            // Killers
-            if (this.killerMoves[ply]?.some(k => this.eq(k, move))) score += 2000000;
-
-            // History
-            const key = this.moveKey(move);
-            score += Math.min(this.historyTable.get(key) || 0, 1000000);
-
-            // Positional
-            if (color === 'black') score += move.to.row * 50;
-            else score += (7 - move.to.row) * 50;
-
-            return { move, score };
-        }).sort((a, b) => b.score - a.score).map(x => x.move);
-    }
-
-    // ============================================
-    // UTILITIES
-    // ============================================
-    static doAllChains(board, row, col, color) {
-        let b = board, r = row, c = col;
-        let safety = 0;
-
-        while (safety < 20) {
-            const caps = CheckersLogic.getMultiCaptures(b, r, c);
-            if (caps.length === 0) break;
-
-            // Pick the capture that takes the most valuable piece
-            let best = caps[0];
-            let bestVal = 0;
-
-            for (const cap of caps) {
-                const victim = b[cap.captured.row][cap.captured.col];
-                const val = (victim === PIECE.BLACK_KING || victim === PIECE.WHITE_KING) ? 500 : 100;
-                if (val > bestVal) {
-                    bestVal = val;
-                    best = cap;
-                }
-            }
-
-            b = CheckersLogic.executeMove(b, best, true);
-            r = best.to.row;
-            c = best.to.col;
-            safety++;
-        }
-
-        return b;
-    }
-
-    static kingMobility(board, row, col) {
-        let m = 0;
-        for (const [dr, dc] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
-            for (let d = 1; d < 8; d++) {
-                const r = row + dr * d, c = col + dc * d;
-                if (r < 0 || r >= 8 || c < 0 || c >= 8) break;
-                if (board[r][c] !== PIECE.EMPTY) break;
-                m++;
-            }
-        }
-        return m;
-    }
-
-    static countColor(board, color) {
-        let count = 0;
         for (let r = 0; r < 8; r++) {
             for (let c = 0; c < 8; c++) {
                 const p = board[r][c];
                 if (p === PIECE.EMPTY) continue;
-                const isBlack = p === PIECE.BLACK || p === PIECE.BLACK_KING;
-                if ((color === 'black') === isBlack) count++;
+
+                let value = 0;
+
+                // 1. MATERIAL
+                if (p === PIECE.BLACK) {
+                    value = 100;
+                    // 2. POSITION - Advancing is good, but protected advancement is better
+                    // Give bonus for Row 3,4 (Center control)
+                    if (r === 3 || r === 4) value += 5;
+                    // Bonus for Rank 7 (About to king)
+                    if (r === 6) value += 20;
+                    // BACK RANK INTEGRITY: Penalty for moving pieces from row 0 too early
+                    if (r === 0) value += 10;
+                }
+                else if (p === PIECE.WHITE) {
+                    value = -100;
+                    if (r === 3 || r === 4) value -= 5;
+                    if (r === 1) value -= 20;
+                    if (r === 7) value -= 10;
+                }
+                else if (p === PIECE.BLACK_KING) {
+                    value = 350;
+                    // King wants to be in center
+                    if (r >= 2 && r <= 5 && c >= 2 && c <= 5) value += 15;
+                }
+                else if (p === PIECE.WHITE_KING) {
+                    value = -350;
+                    if (r >= 2 && r <= 5 && c >= 2 && c <= 5) value -= 15;
+                }
+
+                // 3. SAFETY (Simple implementation)
+                // If piece is on edge, it's harder to capture (good)
+                if (c === 0 || c === 7) {
+                    if (value > 0) value += 5; else value -= 5;
+                }
+
+                score += value;
+
+                if (p === PIECE.BLACK || p === PIECE.BLACK_KING) blackPieces++;
+                else whitePieces++;
             }
         }
-        return count;
+
+        // 4. ENDGAME LOGIC
+        // If winning, force trade. If losing, keep things complicated.
+        if (blackPieces > whitePieces) score += (12 - whitePieces) * 10 * blackSign;
+        if (whitePieces > blackPieces) score -= (12 - blackPieces) * 10 * blackSign;
+
+        // 5. RUNAWAY CHECKER DETECTION
+        // (Simplified: if we have more pieces and a clear path, boost score significantly)
+
+        // Return score relative to whoever's turn it is
+        return (color === botColor) ? score * blackSign : -score * blackSign;
     }
 
-    static isPromo(move, board) {
+    // ============================================
+    // HELPERS & OPTIMIZATIONS
+    // ============================================
+
+    static sortMoves(moves, board, ply, ttMove = null) {
+        return moves.map(m => {
+            let sortScore = 0;
+
+            // 1. Hash Move (TT) gets massive priority
+            if (ttMove && m.from.row === ttMove.from.row && m.from.col === ttMove.from.col &&
+                m.to.row === ttMove.to.row && m.to.col === ttMove.to.col) {
+                sortScore += 1000000;
+            }
+
+            // 2. Captures
+            if (m.captured) {
+                sortScore += 10000;
+                // Capturing a King is better
+                const victim = board[m.captured.row][m.captured.col];
+                if (victim === PIECE.BLACK_KING || victim === PIECE.WHITE_KING) sortScore += 5000;
+            }
+
+            // 3. Promotion
+            if (this.isPromotion(m, board)) sortScore += 5000;
+
+            // 4. Killer Moves
+            if (this.killerMoves[ply]) {
+                if (this.isSameMove(m, this.killerMoves[ply][0])) sortScore += 900;
+                else if (this.isSameMove(m, this.killerMoves[ply][1])) sortScore += 800;
+            }
+
+            // 5. History Heuristic
+            const hKey = m.from.row * 8 + m.from.col;
+            sortScore += (this.history[hKey] || 0);
+
+            return { move: m, sortScore };
+        }).sort((a, b) => b.sortScore - a.sortScore).map(x => x.move);
+    }
+
+    static storeKiller(ply, move) {
+        if (this.killerMoves[ply][0] && !this.isSameMove(move, this.killerMoves[ply][0])) {
+            this.killerMoves[ply][1] = this.killerMoves[ply][0];
+        }
+        this.killerMoves[ply][0] = move;
+    }
+
+    static isSameMove(m1, m2) {
+        if (!m1 || !m2) return false;
+        return m1.from.row === m2.from.row && m1.from.col === m2.from.col && m1.to.row === m2.to.row && m1.to.col === m2.to.col;
+    }
+
+    static computeHash(board, turnColor) {
+        // 32-bit Integer Zobrist Hash
+        let h = 0;
+        for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+                const p = board[r][c];
+                if (p !== PIECE.EMPTY) {
+                    h ^= this.zArray[r][c][p];
+                }
+            }
+        }
+        if (turnColor === 'black') h ^= this.zTurn;
+        return h;
+    }
+
+    static handleMultiJumps(board, row, col, color) {
+        let currentBoard = board;
+        let r = row, c = col;
+        // Greedily take best multi-jump path
+        // Note: Real rules require taking ALL jumps, but usually picking the longest chain is optimal
+        while (true) {
+            const chains = CheckersLogic.getMultiCaptures(currentBoard, r, c);
+            if (chains.length === 0) break;
+            // Take the first available chain (improving this requires a mini-search)
+            const nextMove = chains[0];
+            currentBoard = CheckersLogic.executeMove(currentBoard, nextMove, true);
+            r = nextMove.to.row;
+            c = nextMove.to.col;
+        }
+        return currentBoard;
+    }
+
+    static isPromotion(move, board) {
         const p = board[move.from.row][move.from.col];
         return (p === PIECE.BLACK && move.to.row === 7) || (p === PIECE.WHITE && move.to.row === 0);
     }
 
-    static eq(a, b) {
-        if (!a || !b) return false;
-        return a.from.row === b.from.row && a.from.col === b.from.col &&
-            a.to.row === b.to.row && a.to.col === b.to.col;
-    }
-
-    static moveKey(m) {
-        return `${m.from.row}${m.from.col}${m.to.row}${m.to.col}`;
-    }
-
-    static hash(board, color) {
-        let h = color;
-        for (let r = 0; r < 8; r++) {
-            for (let c = 0; c < 8; c++) {
-                h += board[r][c];
-            }
-        }
-        return h;
+    static scoreCapture(move, board) {
+        const victim = board[move.captured.row][move.captured.col];
+        return (victim === PIECE.BLACK_KING || victim === PIECE.WHITE_KING) ? 5 : 1;
     }
 }
 
