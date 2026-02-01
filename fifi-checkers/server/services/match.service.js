@@ -65,13 +65,29 @@ class MatchService {
         }
 
         // Create timer with timeout callback
+        const self = this;
         TimerService.createTimer(matchId, timerMode, async (timedOutPlayer) => {
-            console.log(`⏱️ TIMEOUT! Player ${timedOutPlayer} ran out of time!`);
-            const result = await this.endMatch(matchId, timedOutPlayer === 1 ? 2 : 1, 'timeout');
+            console.log('');
+            console.log('⏱️ ========== TIMEOUT TRIGGERED ==========');
+            console.log('⏱️ Match:', matchId.slice(0, 8));
+            console.log('⏱️ Timed out player:', timedOutPlayer);
+            console.log('⏱️ =========================================');
 
-            if (result && this.io) {
-                console.log('📡 Emitting timeout match:end to room');
-                this.io.to(`match:${matchId}`).emit('match:end', result);
+            try {
+                // Determine winner (opponent of timed out player)
+                const winnerNum = timedOutPlayer === 1 ? 2 : 1;
+
+                // End the match
+                const result = await self.endMatch(matchId, winnerNum, 'timeout');
+
+                if (result && self.io) {
+                    console.log('⏱️ Emitting match:end to room');
+                    self.io.to(`match:${matchId}`).emit('match:end', result);
+                } else {
+                    console.log('⏱️ No result or no IO to emit');
+                }
+            } catch (err) {
+                console.error('⏱️ Timeout handler error:', err);
             }
         });
 

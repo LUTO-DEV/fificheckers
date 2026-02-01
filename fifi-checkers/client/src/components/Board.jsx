@@ -5,7 +5,7 @@ import useGameStore from '../stores/gameStore';
 import { PIECE } from '../utils/constants';
 
 export default function Board() {
-    const { boardState, currentPlayer, myPlayerNum, myColor } = useGameStore();
+    const { boardState, currentPlayer, myPlayerNum, myColor, lastMove } = useGameStore();
     const {
         handleCellClick,
         selectedPiece,
@@ -31,7 +31,16 @@ export default function Board() {
     const isSelected = (row, col) =>
         selectedPiece?.row === row && selectedPiece?.col === col;
 
-    // Create visual grid (always 0-7, 0-7 visually)
+    // Check if cell is part of last move
+    const isLastMoveFrom = (row, col) =>
+        lastMove?.from?.row === row && lastMove?.from?.col === col;
+
+    const isLastMoveTo = (row, col) =>
+        lastMove?.to?.row === row && lastMove?.to?.col === col;
+
+    const isLastMoveCaptured = (row, col) =>
+        lastMove?.captured?.row === row && lastMove?.captured?.col === col;
+
     const visualRows = Array.from({ length: 8 }, (_, i) => i);
     const visualCols = Array.from({ length: 8 }, (_, i) => i);
 
@@ -51,7 +60,6 @@ export default function Board() {
                 <div className="grid grid-cols-8 grid-rows-8 w-full h-full">
                     {visualRows.map((visualRow) =>
                         visualCols.map((visualCol) => {
-                            // Convert visual position to actual board position
                             const actualRow = getActualRow(visualRow);
                             const actualCol = getActualCol(visualCol);
 
@@ -61,25 +69,46 @@ export default function Board() {
                             const isValidCaptureCell = isValidCapture(actualRow, actualCol);
                             const isSelectedCell = isSelected(actualRow, actualCol);
 
+                            // Last move highlighting
+                            const isFromSquare = isLastMoveFrom(actualRow, actualCol);
+                            const isToSquare = isLastMoveTo(actualRow, actualCol);
+                            const wasCaptured = isLastMoveCaptured(actualRow, actualCol);
+
                             return (
                                 <motion.div
                                     key={`${visualRow}-${visualCol}`}
                                     onClick={() => handleCellClick(actualRow, actualCol)}
                                     className={`
                     relative flex items-center justify-center
-                    ${isDark ? 'cell-dark' : 'cell-light'}
-                    ${isSelectedCell ? 'cell-selected' : ''}
-                    ${isValidMoveCell && !isValidCaptureCell ? 'cell-highlight' : ''}
-                    ${isValidCaptureCell ? 'cell-capture' : ''}
-                    cursor-pointer transition-all duration-150
+                    cursor-pointer transition-all duration-200
+                    ${isDark ? 'bg-emerald-800' : 'bg-amber-100'}
+                    ${isSelectedCell ? 'ring-2 ring-inset ring-gold-400' : ''}
                   `}
+                                    style={{
+                                        // Last move highlight - subtle yellow/green glow
+                                        backgroundColor: isFromSquare
+                                            ? (isDark ? '#4a7c59' : '#d4e157')  // From square - lighter
+                                            : isToSquare
+                                                ? (isDark ? '#5c8a4d' : '#c6d631')  // To square - more visible
+                                                : wasCaptured
+                                                    ? (isDark ? '#8b4545' : '#e57373')  // Captured - reddish
+                                                    : undefined,
+                                        boxShadow: (isFromSquare || isToSquare)
+                                            ? 'inset 0 0 12px rgba(255, 215, 0, 0.4)'
+                                            : undefined
+                                    }}
                                 >
+                                    {/* Last move indicator - subtle dot on from square */}
+                                    {isFromSquare && cell === PIECE.EMPTY && (
+                                        <div className="absolute w-3 h-3 rounded-full bg-yellow-400/40" />
+                                    )}
+
                                     {/* Valid move dot */}
                                     {isValidMoveCell && !isValidCaptureCell && (
                                         <motion.div
                                             initial={{ scale: 0 }}
                                             animate={{ scale: 1 }}
-                                            className="absolute w-3 h-3 rounded-full bg-gold-500/60"
+                                            className="absolute w-3 h-3 rounded-full bg-gold-500/60 shadow-lg"
                                         />
                                     )}
 
@@ -89,7 +118,7 @@ export default function Board() {
                                             initial={{ scale: 0 }}
                                             animate={{ scale: [1, 1.1, 1] }}
                                             transition={{ duration: 0.6, repeat: Infinity }}
-                                            className="absolute w-3/4 h-3/4 rounded-full border-3 border-red-500/80"
+                                            className="absolute w-3/4 h-3/4 rounded-full border-[3px] border-red-500/80"
                                         />
                                     )}
 
@@ -98,6 +127,17 @@ export default function Board() {
                                         <Piece
                                             type={cell}
                                             isSelected={isSelectedCell}
+                                            isLastMove={isToSquare}
+                                        />
+                                    )}
+
+                                    {/* Captured piece ghost effect */}
+                                    {wasCaptured && (
+                                        <motion.div
+                                            initial={{ opacity: 0.6, scale: 1 }}
+                                            animate={{ opacity: 0, scale: 0.5 }}
+                                            transition={{ duration: 0.5 }}
+                                            className="absolute w-8 h-8 rounded-full bg-red-500/30"
                                         />
                                     )}
                                 </motion.div>
@@ -109,11 +149,11 @@ export default function Board() {
 
             {/* Turn indicator overlay */}
             {!isMyTurn && (
-                <div className="absolute inset-0 bg-black/30 rounded-2xl pointer-events-none flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/20 rounded-2xl pointer-events-none flex items-center justify-center">
                     <motion.div
                         animate={{ opacity: [0.7, 1, 0.7] }}
                         transition={{ duration: 1.5, repeat: Infinity }}
-                        className="text-sm font-medium text-luxury-white bg-luxury-dark/90 px-4 py-2 rounded-xl border border-luxury-border"
+                        className="text-sm font-medium text-white bg-black/70 px-4 py-2 rounded-xl"
                     >
                         Opponent's turn...
                     </motion.div>

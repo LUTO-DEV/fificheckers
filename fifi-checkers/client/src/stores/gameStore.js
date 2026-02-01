@@ -24,11 +24,14 @@ const useGameStore = create((set, get) => ({
     mustCapture: false,
     multiCaptureState: null,
 
+    // LAST MOVE HIGHLIGHT - NEW!
+    lastMove: null,
+
     // Game state
     status: 'idle',
     result: null,
 
-    // Chat with unread counter
+    // Chat
     chatMessages: [],
     unreadChatCount: 0,
 
@@ -37,11 +40,7 @@ const useGameStore = create((set, get) => ({
     roomCode: null,
 
     setMatch: (match) => {
-        console.log('📦 setMatch called');
-        console.log('  matchId:', match.matchId);
-        console.log('  currentPlayer:', match.currentPlayer);
-        console.log('  turn:', match.turn);
-
+        console.log('📦 setMatch:', match.matchId?.slice(0, 8));
         set({
             matchId: match.matchId,
             boardState: match.boardState,
@@ -58,6 +57,7 @@ const useGameStore = create((set, get) => ({
             validMoves: [],
             validCaptures: [],
             multiCaptureState: null,
+            lastMove: null,
             chatMessages: [],
             unreadChatCount: 0,
             timer: match.timerState || { player1: 180, player2: 180, activePlayer: 1 }
@@ -68,49 +68,43 @@ const useGameStore = create((set, get) => ({
         const state = get();
         const num = state.player1?.telegramId === telegramId ? 1 : 2;
         const color = num === 1 ? 'white' : 'black';
-        console.log('📦 setMyPlayer: num=', num, 'color=', color);
         set({ myPlayerNum: num, myColor: color });
     },
 
-    updateBoard: (boardState, turn, currentPlayer) => {
-        console.log('📦 updateBoard: currentPlayer=', currentPlayer, 'turn=', turn);
+    updateBoard: (boardState, turn, currentPlayer, move = null) => {
         set({
             boardState,
             turn: turn || (currentPlayer === 1 ? 'white' : 'black'),
-            currentPlayer: currentPlayer,
-            selectedPiece: null,
-            validMoves: [],
-            validCaptures: []
-        });
-    },
-
-    setTimer: (timer) => {
-        set({ timer });
-    },
-
-    selectPiece: (row, col, moves, captures, mustCapture) => {
-        console.log('📦 selectPiece:', row, col, 'moves:', moves?.length, 'captures:', captures?.length);
-        set({
-            selectedPiece: { row, col },
-            validMoves: moves || [],
-            validCaptures: captures || [],
-            mustCapture: mustCapture || false
-        });
-    },
-
-    clearSelection: () => {
-        set({
+            currentPlayer,
             selectedPiece: null,
             validMoves: [],
             validCaptures: [],
-            mustCapture: false
+            lastMove: move  // Store the last move for highlighting
         });
     },
 
-    setMultiCapture: (state) => {
-        console.log('📦 setMultiCapture:', state);
-        set({ multiCaptureState: state });
+    // Set last move explicitly
+    setLastMove: (move) => {
+        set({ lastMove: move });
     },
+
+    setTimer: (timer) => set({ timer }),
+
+    selectPiece: (row, col, moves, captures, mustCapture) => set({
+        selectedPiece: { row, col },
+        validMoves: moves || [],
+        validCaptures: captures || [],
+        mustCapture: mustCapture || false
+    }),
+
+    clearSelection: () => set({
+        selectedPiece: null,
+        validMoves: [],
+        validCaptures: [],
+        mustCapture: false
+    }),
+
+    setMultiCapture: (state) => set({ multiCaptureState: state }),
 
     setResult: (result) => {
         console.log('📦 setResult:', result?.reason);
@@ -125,9 +119,7 @@ const useGameStore = create((set, get) => ({
         });
     },
 
-    clearUnreadChat: () => {
-        set({ unreadChatCount: 0 });
-    },
+    clearUnreadChat: () => set({ unreadChatCount: 0 }),
 
     setQueuePosition: (pos) => set({ queuePosition: pos }),
     setRoomCode: (code) => set({ roomCode: code }),
@@ -153,6 +145,7 @@ const useGameStore = create((set, get) => ({
         validCaptures: [],
         mustCapture: false,
         multiCaptureState: null,
+        lastMove: null,
         status: 'idle',
         result: null,
         chatMessages: [],

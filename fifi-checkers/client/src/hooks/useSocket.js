@@ -85,25 +85,24 @@ export default function useSocket() {
         });
 
         globalSocket.on('move:result', (data) => {
-            console.log('♟️ Move result received:', JSON.stringify(data));
+            console.log('♟️ Move result received');
 
             const store = useGameStore.getState();
 
-            // Update board
             if (data.board) {
-                // Determine next player - handle both turnEnded true and false cases
                 let nextPlayer = data.nextPlayer;
                 if (nextPlayer === undefined) {
-                    // If turnEnded is false, keep current player
-                    nextPlayer = data.turnEnded === false ? store.currentPlayer : (store.currentPlayer === 1 ? 2 : 1);
+                    nextPlayer = data.turnEnded === false
+                        ? store.currentPlayer
+                        : (store.currentPlayer === 1 ? 2 : 1);
                 }
 
                 const turn = nextPlayer === 1 ? 'white' : 'black';
-                console.log('📦 Updating board: nextPlayer=', nextPlayer, 'turn=', turn);
-                store.updateBoard(data.board, turn, nextPlayer);
+
+                // Pass the move for highlighting
+                store.updateBoard(data.board, turn, nextPlayer, data.move);
             }
 
-            // Update timer
             if (data.timerState) {
                 store.setTimer({
                     ...data.timerState,
@@ -111,16 +110,13 @@ export default function useSocket() {
                 });
             }
 
-            // Handle multi-capture
             if (data.multiCapture && data.availableCaptures?.length > 0) {
-                console.log('🔄 Multi-capture mode! Available:', data.availableCaptures.length);
                 const cap = data.availableCaptures[0];
                 store.setMultiCapture({
                     row: cap.from.row,
                     col: cap.from.col,
                     availableCaptures: data.availableCaptures
                 });
-                // Auto-select the piece that must continue capturing
                 store.selectPiece(
                     cap.from.row,
                     cap.from.col,

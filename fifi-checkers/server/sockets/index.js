@@ -3,14 +3,15 @@ const matchmakingSocket = require('./matchmaking.socket');
 const matchSocket = require('./match.socket');
 const chatSocket = require('./chat.socket');
 const punishmentSocket = require('./punishment.socket');
-const MatchService = require('../services/match.service'); // ADD THIS
+const MatchService = require('../services/match.service');
 
 // Track online users
 const onlineUsers = new Map();
 
 function initializeSockets(io) {
-    // Set IO on MatchService for timeout emissions
-    MatchService.setIO(io); // ADD THIS
+    // CRITICAL: Set IO on MatchService for timeout emissions
+    MatchService.setIO(io);
+    console.log('✅ Socket IO initialized and passed to MatchService');
 
     // Authentication middleware
     io.use(socketAuthMiddleware);
@@ -28,22 +29,18 @@ function initializeSockets(io) {
         matchmakingSocket(io, socket);
         matchSocket(io, socket);
         chatSocket(io, socket);
-        punishmentSocket(io, socket);
+        if (punishmentSocket) punishmentSocket(io, socket);
 
-        // Handle disconnection - BUT with a delay!
+        // Handle disconnection with delay
         socket.on('disconnect', (reason) => {
             console.log(`User disconnected: ${socket.telegramId} (reason: ${reason})`);
 
-            // Don't immediately end match - give time to reconnect
             setTimeout(() => {
-                // Check if user reconnected
                 const currentSocketId = onlineUsers.get(socket.telegramId);
 
                 if (currentSocketId === socket.id) {
-                    // Still disconnected, remove from online
                     onlineUsers.delete(socket.telegramId);
 
-                    // Only handle match disconnect if truly gone for 10 seconds
                     setTimeout(() => {
                         const stillGone = !onlineUsers.has(socket.telegramId);
                         if (stillGone) {
@@ -54,11 +51,11 @@ function initializeSockets(io) {
                                 }
                             });
                         }
-                    }, 10000); // 10 second grace period
+                    }, 10000);
                 }
-            }, 2000); // 2 second initial delay
+            }, 2000);
 
-            // Leave queue immediately (that's fine)
+            // Leave queue immediately
             const MatchmakingService = require('../services/matchmaking.service');
             MatchmakingService.leaveQueue(socket.telegramId);
         });
